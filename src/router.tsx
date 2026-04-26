@@ -1,6 +1,15 @@
+import * as React from "react";
 import { createRouter, useRouter } from "@tanstack/react-router";
 import { QueryClient } from "@tanstack/react-query";
 import { routeTree } from "./routeTree.gen";
+
+// Shim: garante que React esteja disponível globalmente em produção.
+// Alguns bundles SSR/cliente em ambientes não-Lovable (Vercel) podem
+// referenciar React fora de escopo de módulo, causando "React is not defined".
+if (typeof globalThis !== "undefined") {
+  // @ts-expect-error - injeção intencional no global
+  globalThis.React = globalThis.React ?? React;
+}
 
 // Auto-recuperação de erro de chunk: quando o Vite faz rebuild e o navegador
 // ainda referencia chunks antigos, o import dinâmico falha e a navegação
