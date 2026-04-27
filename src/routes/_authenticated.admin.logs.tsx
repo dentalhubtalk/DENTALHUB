@@ -106,21 +106,42 @@ function AdminLogs() {
     [periodo, customRange],
   );
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["admin-logs", filtroStatus, range.dataInicio, range.dataFim],
     enabled: !!accessToken,
-    queryFn: () =>
-      adminLogs({
-        data: {
-          accessToken,
-          limit: 1000,
-          filtroStatus,
-          dataInicio: range.dataInicio,
-          dataFim: range.dataFim,
-        },
-      }),
+    queryFn: async () => {
+      console.log("[AdminLogs] chamando adminLogs", {
+        filtroStatus,
+        dataInicio: range.dataInicio,
+        dataFim: range.dataFim,
+      });
+      try {
+        const res = await adminLogs({
+          data: {
+            accessToken,
+            limit: 1000,
+            filtroStatus,
+            dataInicio: range.dataInicio,
+            dataFim: range.dataFim,
+          },
+        });
+        console.log("[AdminLogs] resposta", {
+          envios: res?.envios?.length,
+          grupos: res?.grupos?.length,
+        });
+        return res;
+      } catch (e) {
+        console.error("[AdminLogs] erro", e);
+        throw e;
+      }
+    },
+    retry: 1,
     refetchInterval: 60_000,
   });
+
+  if (error) {
+    console.error("[AdminLogs] query error final", error);
+  }
 
   const grupos = data?.grupos ?? [];
   const envios = data?.envios ?? [];
@@ -259,6 +280,14 @@ function AdminLogs() {
               {isLoading ? (
                 <div className="flex items-center justify-center py-10">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                </div>
+              ) : error ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+                  Erro ao carregar os logs: {(error as Error).message}
+                  <br />
+                  <span className="text-xs opacity-80">
+                    Abra o Console do navegador (F12) para ver detalhes.
+                  </span>
                 </div>
               ) : grupos.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
