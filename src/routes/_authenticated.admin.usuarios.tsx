@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { formatDateBR } from "@/lib/date-format";
+import { supabase } from "@/integrations/supabase/client";
 
 interface UsuarioRow {
   id: string;
@@ -89,7 +90,7 @@ function AdminUsuarios() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-usuarios"],
     enabled: !!accessToken,
-    queryFn: () => adminUsuarios({ data: { accessToken } }),
+    queryFn: () => loadAdminUsuarios(accessToken),
   });
 
   const toggleCortesiaMutation = useMutation({
@@ -407,4 +408,59 @@ function AdminUsuarios() {
       </Dialog>
     </div>
   );
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs = 8000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("timeout")), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function loadAdminUsuarios(accessToken: string) {
+  try {
+    return await withTimeout(adminUsuarios({ data: { accessToken } }));
+  } catch {
+    const { data: profiles, error } = await supabase
+      .from("profiles")
+      .select("id, email, role, created_at, nome_responsavel, nome_clinica, telefone_contato, acesso_cortesia")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+
+    const ids = (profiles ?? []).map((p) => p.id);
+    const contatosCount: Record<string, number> = {};
+    const whatsappStatus: Record<string, string> = {};
+    const planoStatus: Record<string, string> = {};
+
+    if (ids.length > 0) {
+      const [contatosRes, instRes, assinRes] = await Promise.all([
+        supabase.from("contatos").select("user_id").in("user_id", ids),
+        supabase.from("whatsapp_instances").select("user_id, status").in("user_id", ids),
+        supabase.from("assinaturas").select("user_id, status, planos(nome)").in("user_id", ids),
+      ]);
+      for (const c of contatosRes.data ?? []) contatosCount[c.user_id] = (contatosCount[c.user_id] ?? 0) + 1;
+      for (const i of instRes.data ?? []) whatsappStatus[i.user_id] = i.status;
+      for (const a of assinRes.data ?? []) {
+        if (a.status === "ativa" || a.status === "trial") {
+          const plano = Array.isArray(a.planos) ? a.planos[0] : a.planos;
+          planoStatus[a.user_id] = plano?.nome ?? a.status;
+        }
+      }
+    }
+
+    return {
+      usuarios: (profiles ?? []).map((p) => ({
+        ...p,
+        contatos: contatosCount[p.id] ?? 0,
+        whatsapp_status: whatsappStatus[p.id] ?? "desconectado",
+        plano: planoStatus[p.id] ?? "Gratuito",
+        acesso_cortesia: Boolean(p.acesso_cortesia),
+      })),
+    };
+  }
 }
