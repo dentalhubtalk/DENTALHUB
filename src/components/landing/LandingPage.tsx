@@ -26,7 +26,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import heroDentist from "@/assets/hero-dentist.jpg";
+import heroDentist from "@/assets/hero-dentista-whatsapp.png";
 
 export function LandingPage() {
   return (
@@ -146,13 +146,13 @@ function Hero() {
           </div>
 
           <div className="relative">
-            <div className="relative overflow-hidden rounded-3xl bg-secondary/40">
+            <div className="relative overflow-hidden rounded-3xl">
               <img
                 src={heroDentist}
-                alt="Dentista profissional sorrindo em consultório odontológico moderno"
-                width={1024}
-                height={1024}
-                className="h-full w-full object-cover"
+                alt="Dentista sorrindo enquanto envia mensagem de aniversário pelo WhatsApp para paciente"
+                width={1920}
+                height={1088}
+                className="h-full w-full object-contain"
               />
             </div>
 
