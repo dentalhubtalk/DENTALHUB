@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 import {
   adminEvolutionInstances,
   adminMetrics,
@@ -60,7 +61,7 @@ function AdminDashboard() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin-metrics"],
     enabled: !!accessToken,
-    queryFn: () => adminMetrics({ data: { accessToken } }),
+    queryFn: () => loadAdminMetrics(accessToken),
     refetchInterval: 60_000,
   });
 
@@ -168,6 +169,58 @@ function AdminDashboard() {
   );
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs = 8000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("timeout")), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function countRows(table: string, apply?: (q: any) => any) {
+  try {
+    const base = supabase.from(table).select("*", { count: "exact", head: true });
+    const { count } = await (apply ? apply(base) : base);
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function loadAdminMetrics(accessToken: string) {
+  try {
+    return await withTimeout(adminMetrics({ data: { accessToken } }));
+  } catch {
+    const inicioMes = new Date();
+    inicioMes.setDate(1);
+    inicioMes.setHours(0, 0, 0, 0);
+    const inicioMesIso = inicioMes.toISOString();
+    const [totalUsuarios, whatsappConectado, contatos, enviadosMes, falhasMes, assinaturasAtivas] = await Promise.all([
+      countRows("profiles"),
+      countRows("whatsapp_instances", (q) => q.eq("status", "connected")),
+      countRows("contatos"),
+      countRows("envios_whatsapp", (q) => q.eq("status", "enviado").gte("created_at", inicioMesIso)),
+      countRows("envios_whatsapp", (q) => q.eq("status", "falha_envio").gte("created_at", inicioMesIso)),
+      countRows("assinaturas", (q) => q.eq("status", "ativa")),
+    ]);
+    const totalEnvios = enviadosMes + falhasMes;
+    return {
+      totalUsuarios,
+      whatsappConectado,
+      contatos,
+      enviadosMes,
+      falhasMes,
+      taxaSucesso: totalEnvios > 0 ? Math.round((enviadosMes / totalEnvios) * 100) : 0,
+      mrr: 0,
+      assinaturasAtivas,
+    };
+  }
+}
+
 function EvolutionMonitorCard({ accessToken }: { accessToken: string }) {
   const queryClient = useQueryClient();
   const [refreshingAll, setRefreshingAll] = useState(false);
@@ -175,7 +228,7 @@ function EvolutionMonitorCard({ accessToken }: { accessToken: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-evolution-instances"],
     enabled: !!accessToken,
-    queryFn: () => adminEvolutionInstances({ data: { accessToken } }),
+    queryFn: () => loadEvolutionInstances(accessToken),
     refetchInterval: 120_000,
   });
 
@@ -361,6 +414,39 @@ function EvolutionMonitorCard({ accessToken }: { accessToken: string }) {
       </CardContent>
     </Card>
   );
+}
+
+async function loadEvolutionInstances(accessToken: string) {
+  try {
+    return await withTimeout(adminEvolutionInstances({ data: { accessToken } }));
+  } catch {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("id, user_id, instance_name, status, updated_at, created_at, owner_number")
+      .order("created_at", { ascending: false });
+    const instancias = data ?? [];
+    const ids = Array.from(new Set(instancias.map((i) => i.user_id).filter(Boolean)));
+    const profMap: Record<string, { email: string; nome_responsavel: string | null }> = {};
+    if (ids.length > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, email, nome_responsavel")
+        .in("id", ids);
+      for (const p of profs ?? []) {
+        profMap[p.id] = { email: p.email, nome_responsavel: p.nome_responsavel ?? null };
+      }
+    }
+    return {
+      instancias: instancias.map((i) => ({
+        ...i,
+        updated_at: i.updated_at ?? i.created_at ?? null,
+        project_tag: null,
+        email: profMap[i.user_id]?.email ?? "—",
+        nome_responsavel: profMap[i.user_id]?.nome_responsavel ?? null,
+      })),
+      migrationPending: false as const,
+    };
+  }
 }
 
 function formatPhoneBR(raw: string): string {
