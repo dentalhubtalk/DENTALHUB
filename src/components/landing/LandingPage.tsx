@@ -316,7 +316,7 @@ function Features() {
 /* ---------------- Benefits (2 cards) ---------------- */
 function Benefits() {
   return (
-    <section id="beneficios" className="py-20">
+    <section id="beneficios" className="py-14">
       <div className="mx-auto grid max-w-7xl gap-6 px-4 sm:px-6 md:grid-cols-2 lg:px-8">
         {/* Card verde */}
         <Card className="relative gap-0 overflow-hidden border-emerald-200/60 bg-emerald-50/60 p-8 dark:bg-emerald-950/20">
@@ -435,7 +435,7 @@ function Testimonials() {
   ];
 
   return (
-    <section id="depoimentos" className="bg-secondary/40 py-20">
+    <section id="depoimentos" className="bg-secondary/40 py-14">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -504,7 +504,7 @@ function HowItWorks() {
   ];
 
   return (
-    <section id="como-funciona" className="bg-background py-20">
+    <section id="como-funciona" className="bg-background py-14">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -589,7 +589,7 @@ function FAQ() {
   ];
 
   return (
-    <section id="faq" className="bg-secondary/40 py-20">
+    <section id="faq" className="bg-secondary/40 py-14">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
