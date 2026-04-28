@@ -249,7 +249,7 @@ function Features() {
   ];
 
   return (
-    <section className="bg-background py-20">
+    <section className="bg-background py-14">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -260,21 +260,53 @@ function Features() {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
-          {features.map((f) => (
-            <Card
-              key={f.title}
-              className="gap-0 border-border/60 p-6 text-center transition-all hover:-translate-y-1 hover:shadow-lg"
-            >
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <f.icon className="h-6 w-6" />
+        <div className="mt-10 grid items-center gap-10 lg:grid-cols-[minmax(0,420px)_1fr]">
+          {/* Celular incorporado */}
+          <div className="relative mx-auto w-full max-w-sm lg:max-w-none">
+            <div
+              className="absolute inset-0 -z-10 rounded-[3rem] bg-gradient-to-br from-primary/20 via-primary/5 to-transparent blur-3xl"
+              aria-hidden="true"
+            />
+            <img
+              src={celularWhatsapp}
+              alt="Celular exibindo mensagem de aniversário no WhatsApp"
+              loading="lazy"
+              width={1024}
+              height={1024}
+              className="relative mx-auto w-full max-w-[360px] drop-shadow-2xl lg:max-w-[420px]"
+            />
+            {/* Floating badges */}
+            <div className="absolute -left-2 top-10 hidden items-center gap-2 rounded-full bg-background px-3 py-2 shadow-lg ring-1 ring-border sm:flex">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <Send className="h-3.5 w-3.5" />
               </div>
-              <h3 className="mt-5 text-base font-bold">{f.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                {f.description}
-              </p>
-            </Card>
-          ))}
+              <span className="text-xs font-semibold">Mensagem enviada</span>
+            </div>
+            <div className="absolute -right-2 bottom-16 hidden items-center gap-2 rounded-full bg-background px-3 py-2 shadow-lg ring-1 ring-border sm:flex">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Heart className="h-3.5 w-3.5 fill-current" />
+              </div>
+              <span className="text-xs font-semibold">Paciente feliz</span>
+            </div>
+          </div>
+
+          {/* Features grid */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {features.map((f) => (
+              <Card
+                key={f.title}
+                className="gap-0 border-border/60 p-5 transition-all hover:-translate-y-1 hover:shadow-lg"
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <f.icon className="h-5 w-5" />
+                </div>
+                <h3 className="mt-4 text-base font-bold">{f.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  {f.description}
+                </p>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     </section>
