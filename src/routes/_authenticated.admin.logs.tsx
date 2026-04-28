@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/use-auth";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { adminLogs } from "@/utils/admin.functions";
+import { supabase } from "@/integrations/supabase/client";
 import {
   AlertTriangle,
   CalendarIcon,
@@ -20,7 +19,6 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -43,20 +41,24 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { formatDateTimeBR, formatDateBR } from "@/lib/date-format";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { formatDateBR } from "@/lib/date-format";
 
 export const Route = createFileRoute("/_authenticated/admin/logs")({
   component: AdminLogs,
 });
 
-type FiltroStatus = "todos" | "enviado" | "falha_envio";
 type FiltroPeriodo = "hoje" | "7d" | "30d" | "mes" | "personalizado";
+
+type LogRow = {
+  user_id: string | null;
+  email: string | null;
+  nome_responsavel: string | null;
+  instancia: string | null;
+  data: string; // YYYY-MM-DD ou ISO
+  total: number | null;
+  enviados: number | null;
+  erros: number | null;
+};
 
 function getRange(periodo: FiltroPeriodo, custom?: { from?: Date; to?: Date }) {
   const now = new Date();
@@ -93,116 +95,126 @@ function getRange(periodo: FiltroPeriodo, custom?: { from?: Date; to?: Date }) {
   return { dataInicio: inicio.toISOString(), dataFim: fim.toISOString() };
 }
 
+type GrupoUsuario = {
+  user_id: string;
+  email: string;
+  nome_responsavel: string;
+  instancias: Array<{
+    instancia: string;
+    linhas: LogRow[];
+    total: number;
+    enviados: number;
+    erros: number;
+  }>;
+  total: number;
+  enviados: number;
+  erros: number;
+};
+
+function agrupar(rows: LogRow[]): GrupoUsuario[] {
+  const mapUser = new Map<string, GrupoUsuario>();
+
+  for (const r of rows) {
+    const userKey = r.user_id ?? r.email ?? "—";
+    let u = mapUser.get(userKey);
+    if (!u) {
+      u = {
+        user_id: userKey,
+        email: r.email ?? "—",
+        nome_responsavel: r.nome_responsavel ?? r.email ?? "—",
+        instancias: [],
+        total: 0,
+        enviados: 0,
+        erros: 0,
+      };
+      mapUser.set(userKey, u);
+    }
+
+    const instKey = r.instancia ?? "—";
+    let inst = u.instancias.find((i) => i.instancia === instKey);
+    if (!inst) {
+      inst = { instancia: instKey, linhas: [], total: 0, enviados: 0, erros: 0 };
+      u.instancias.push(inst);
+    }
+
+    const total = r.total ?? 0;
+    const enviados = r.enviados ?? 0;
+    const erros = r.erros ?? 0;
+
+    inst.linhas.push(r);
+    inst.total += total;
+    inst.enviados += enviados;
+    inst.erros += erros;
+
+    u.total += total;
+    u.enviados += enviados;
+    u.erros += erros;
+  }
+
+  // Ordenar linhas por data desc dentro de cada instância
+  for (const u of mapUser.values()) {
+    for (const i of u.instancias) {
+      i.linhas.sort((a, b) => (a.data < b.data ? 1 : -1));
+    }
+    u.instancias.sort((a, b) => a.instancia.localeCompare(b.instancia));
+  }
+
+  return Array.from(mapUser.values()).sort((a, b) => b.total - a.total);
+}
+
 function AdminLogs() {
-  const { session } = useAuth();
   const isMobile = useIsMobile();
-  const accessToken = session?.access_token ?? "";
-  const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>("todos");
   const [periodo, setPeriodo] = useState<FiltroPeriodo>("7d");
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
 
-  const range = useMemo(
-    () => getRange(periodo, customRange),
-    [periodo, customRange],
-  );
+  const range = useMemo(() => getRange(periodo, customRange), [periodo, customRange]);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["admin-logs", filtroStatus, range.dataInicio, range.dataFim],
-    enabled: !!accessToken,
+  const { data: rows = [], isLoading, error } = useQuery({
+    queryKey: ["logs-agrupados", range.dataInicio, range.dataFim],
     queryFn: async () => {
-      console.log("[AdminLogs] chamando adminLogs", {
-        filtroStatus,
-        dataInicio: range.dataInicio,
-        dataFim: range.dataFim,
-      });
-      // Timeout defensivo aumentado para 45s (cold start do worker).
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error(
-                "Tempo esgotado (45s). Recarregue a página com Ctrl+Shift+R.",
-              ),
-            ),
-          45_000,
-        ),
-      );
-      try {
-        const res = await Promise.race([
-          adminLogs({
-            data: {
-              accessToken,
-              limit: 200,
-              filtroStatus,
-              dataInicio: range.dataInicio,
-              dataFim: range.dataFim,
-            },
-          }),
-          timeout,
-        ]);
-        console.log("[AdminLogs] resposta", {
-          envios: res?.envios?.length,
-          grupos: res?.grupos?.length,
-        });
-        return res;
-      } catch (e) {
-        console.error("[AdminLogs] erro", e);
-        throw e;
-      }
+      console.log("ADMIN LOGS START", range);
+      const t0 = performance.now();
+      const { data, error } = await supabase
+        .from("logs_agrupados")
+        .select("*")
+        .gte("data", range.dataInicio)
+        .lte("data", range.dataFim)
+        .limit(200);
+      console.log("ADMIN LOGS DONE", Math.round(performance.now() - t0), "ms");
+      console.log("TOTAL REGISTROS:", data?.length);
+      if (error) throw error;
+      return (data ?? []) as LogRow[];
     },
-    retry: 0,
+    staleTime: 30_000,
   });
 
-  if (error) {
-    console.error("[AdminLogs] query error final", error);
-  }
-
-  const grupos = data?.grupos ?? [];
-  const envios = data?.envios ?? [];
-  const totalEnviados = envios.filter((e) => e.status === "enviado").length;
-  const totalErros = envios.filter((e) => e.status === "falha_envio").length;
+  const grupos = useMemo(() => agrupar(rows), [rows]);
+  const totalGeral = rows.reduce((s, r) => s + (r.total ?? 0), 0);
+  const totalEnviados = rows.reduce((s, r) => s + (r.enviados ?? 0), 0);
+  const totalErros = rows.reduce((s, r) => s + (r.erros ?? 0), 0);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          Monitoramento de Envios
-        </h1>
+        <h1 className="text-2xl font-bold text-foreground">Monitoramento de Envios</h1>
         <p className="mt-1 text-muted-foreground">
-          Logs de envios agrupados por usuário, com filtros por período e
-          status.
+          Logs agrupados por usuário, instância e dia.
         </p>
       </div>
 
       {/* Filtros de período */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-2 p-4">
-          <Button
-            variant={periodo === "hoje" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setPeriodo("hoje")}
-          >
+          <Button variant={periodo === "hoje" ? "default" : "outline"} size="sm" onClick={() => setPeriodo("hoje")}>
             Hoje
           </Button>
-          <Button
-            variant={periodo === "7d" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setPeriodo("7d")}
-          >
+          <Button variant={periodo === "7d" ? "default" : "outline"} size="sm" onClick={() => setPeriodo("7d")}>
             Últimos 7 dias
           </Button>
-          <Button
-            variant={periodo === "30d" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setPeriodo("30d")}
-          >
+          <Button variant={periodo === "30d" ? "default" : "outline"} size="sm" onClick={() => setPeriodo("30d")}>
             Últimos 30 dias
           </Button>
-          <Button
-            variant={periodo === "mes" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setPeriodo("mes")}
-          >
+          <Button variant={periodo === "mes" ? "default" : "outline"} size="sm" onClick={() => setPeriodo("mes")}>
             Este mês
           </Button>
           <Popover>
@@ -245,10 +257,8 @@ function AdminLogs() {
             <UsersIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{envios.length}</div>
-            <p className="text-xs text-muted-foreground">
-              {grupos.length} usuário(s)
-            </p>
+            <div className="text-2xl font-bold">{totalGeral}</div>
+            <p className="text-xs text-muted-foreground">{grupos.length} usuário(s)</p>
           </CardContent>
         </Card>
         <Card>
@@ -262,7 +272,7 @@ function AdminLogs() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Falhas</CardTitle>
+            <CardTitle className="text-sm font-medium">Erros</CardTitle>
             <AlertTriangle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
@@ -271,148 +281,108 @@ function AdminLogs() {
         </Card>
       </div>
 
-      <Tabs
-        value={filtroStatus}
-        onValueChange={(v) => setFiltroStatus(v as FiltroStatus)}
-        className="space-y-4"
-      >
-        <TabsList>
-          <TabsTrigger value="todos">Todos</TabsTrigger>
-          <TabsTrigger value="enviado">Enviados</TabsTrigger>
-          <TabsTrigger value="falha_envio">Falhas</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={filtroStatus}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Logs por usuário</CardTitle>
-              <CardDescription>
-                Clique em um usuário para expandir os envios.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="flex items-center justify-center py-10">
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                </div>
-              ) : error ? (
-                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-                  Erro ao carregar os logs: {(error as Error).message}
-                  <br />
-                  <span className="text-xs opacity-80">
-                    Abra o Console do navegador (F12) para ver detalhes.
-                  </span>
-                </div>
-              ) : grupos.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  Nenhum log encontrado neste período.
-                </p>
-              ) : (
-                <Accordion type="multiple" className="space-y-2">
-                  {grupos.map((g) => (
-                    <AccordionItem
-                      key={g.user_id}
-                      value={g.user_id}
-                      className="rounded-md border px-3"
-                    >
-                      <AccordionTrigger className="hover:no-underline">
-                        <div className="flex flex-1 flex-col gap-2 pr-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                          <div className="flex flex-col items-start text-left">
-                            <span className="font-medium break-all">
-                              {g.nome_responsavel ?? g.email}
-                            </span>
-                            <span className="text-xs text-muted-foreground break-all">
-                              {g.email}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs">
-                            <Badge variant="outline">{g.total} total</Badge>
-                            <Badge
-                              variant="default"
-                              className="bg-accent/20 text-accent hover:bg-accent/30"
-                            >
-                              {g.enviados} ok
-                            </Badge>
-                            {g.falhas > 0 && (
-                              <Badge variant="destructive">
-                                {g.falhas} falha(s)
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Logs por usuário</CardTitle>
+          <CardDescription>
+            Clique em um usuário para ver as instâncias e os dias.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+          ) : error ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+              Erro ao carregar os logs: {(error as Error).message}
+            </div>
+          ) : grupos.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Nenhum log encontrado neste período.
+            </p>
+          ) : (
+            <Accordion type="multiple" className="space-y-2">
+              {grupos.map((g) => (
+                <AccordionItem key={g.user_id} value={g.user_id} className="rounded-md border px-3">
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex flex-1 flex-col gap-2 pr-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                      <div className="flex flex-col items-start text-left">
+                        <span className="font-medium break-all">{g.nome_responsavel}</span>
+                        <span className="text-xs text-muted-foreground break-all">{g.email}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Badge variant="outline">{g.total} total</Badge>
+                        <Badge variant="default" className="bg-accent/20 text-accent hover:bg-accent/30">
+                          {g.enviados} ok
+                        </Badge>
+                        {g.erros > 0 && <Badge variant="destructive">{g.erros} erro(s)</Badge>}
+                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform" />
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-4">
+                      {g.instancias.map((inst) => (
+                        <div key={inst.instancia} className="rounded-md border bg-muted/30 p-3">
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold">📱 {inst.instancia}</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                              <Badge variant="outline">{inst.total} total</Badge>
+                              <Badge variant="default" className="bg-accent/20 text-accent hover:bg-accent/30">
+                                {inst.enviados} ok
                               </Badge>
-                            )}
-                            {g.ultimoEnvio && (
-                              <span className="hidden text-muted-foreground sm:inline">
-                                Último: {formatDateTimeBR(g.ultimoEnvio)}
-                              </span>
-                            )}
-                            <ChevronDown className="h-4 w-4 shrink-0 transition-transform" />
+                              {inst.erros > 0 && (
+                                <Badge variant="destructive">{inst.erros} erro(s)</Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Data</TableHead>
+                                  <TableHead className="text-right">Total</TableHead>
+                                  <TableHead className="text-right">Enviados</TableHead>
+                                  <TableHead className="text-right">Erros</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {inst.linhas.map((l, idx) => (
+                                  <TableRow key={`${l.data}-${idx}`}>
+                                    <TableCell className="whitespace-nowrap">
+                                      {formatDateBR(l.data)}
+                                    </TableCell>
+                                    <TableCell className="text-right">{l.total ?? 0}</TableCell>
+                                    <TableCell className="text-right text-accent">
+                                      {l.enviados ?? 0}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      {(l.erros ?? 0) > 0 ? (
+                                        <span className="text-destructive font-medium">
+                                          {l.erros}
+                                        </span>
+                                      ) : (
+                                        0
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
                           </div>
                         </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="-mx-3 overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Contato</TableHead>
-                                <TableHead>Telefone</TableHead>
-                                <TableHead>Status</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {g.envios.map((e) => (
-                                <TableRow key={e.id}>
-                                  <TableCell className="text-muted-foreground whitespace-nowrap">
-                                    {formatDateTimeBR(e.created_at)}
-                                  </TableCell>
-                                  <TableCell>{e.nome ?? "—"}</TableCell>
-                                  <TableCell className="font-mono text-xs whitespace-nowrap">
-                                    {e.telefone}
-                                  </TableCell>
-                                  <TableCell>
-                                    {e.status === "falha_envio" && e.erro ? (
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Badge variant="destructive">
-                                              Falha
-                                            </Badge>
-                                          </TooltipTrigger>
-                                          <TooltipContent
-                                            side="top"
-                                            className="max-w-xs text-xs"
-                                          >
-                                            {e.erro}
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    ) : (
-                                      <Badge
-                                        variant={
-                                          e.status === "enviado"
-                                            ? "default"
-                                            : "outline"
-                                        }
-                                      >
-                                        {e.status === "enviado"
-                                          ? "Enviado"
-                                          : e.status}
-                                      </Badge>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
