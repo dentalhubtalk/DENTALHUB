@@ -279,9 +279,7 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
       let nextImagemUrl = imagemUrl;
 
       if (pendingFile) {
-        // Se o usuário escolheu trocar a imagem, o upload é OBRIGATÓRIO.
-        // Falha no upload ABORTA o save — nunca gravamos imagem_url null/antigo
-        // quando o intent do usuário era trocar a imagem.
+        // Upload de imagem própria
         try {
           nextImagemUrl = await uploadPendingFile();
         } catch (uploadErr) {
@@ -298,10 +296,26 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
         }
 
         try {
-          // Invariante: upload pendente NUNCA pode resultar em null/empty.
           assertPersistableImageUrl(nextImagemUrl, true);
         } catch {
           toast.error("Não foi possível obter a URL pública da imagem.");
+          setSaving(false);
+          return;
+        }
+      } else if (selectedModelo) {
+        // Aplicação de modelo: copia imagem do bucket público para o bucket
+        // do usuário, mantendo o n8n apontando para o caminho próprio dele.
+        try {
+          nextImagemUrl = await uploadModeloImage(selectedModelo);
+        } catch (modeloErr) {
+          console.error(
+            "[MensagemTab] aplicação do modelo falhou",
+            modeloErr,
+          );
+          toast.error(
+            getAniversariosErrorMessage(modeloErr) ||
+              "Falha ao aplicar o modelo. Tente novamente.",
+          );
           setSaving(false);
           return;
         }
@@ -361,6 +375,7 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
         queryKey: ["aniv:instance", userId],
       });
       setPendingFile(null);
+      setSelectedModelo(null);
       setLocalPreviewUrl((current) => {
         if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
         return null;
