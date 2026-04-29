@@ -223,6 +223,7 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
       return null;
     });
     setPendingFile(null);
+    setSelectedModelo(null);
     setImagemUrl(null);
 
     // Apaga do Storage de verdade — senão a "imagem antiga" persiste
@@ -235,6 +236,39 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
         console.warn("[MensagemTab] falha ao remover imagem do storage", err);
       }
     }
+  };
+
+  // Quando o usuário escolheu um modelo, baixamos a imagem do bucket público
+  // de modelos e re-uploadeamos no bucket próprio do usuário, mantendo a
+  // invariante: whatsapp_instances.imagem_url SEMPRE aponta para
+  // imagens-whatsapp/{userId}/{instance}/imagem.{ext} (consumido pelo n8n).
+  const uploadModeloImage = async (modelo: ModeloMensagem): Promise<string> => {
+    if (!user) throw new Error("Usuário não autenticado");
+    const instanceName = instanceQuery.data?.instance_name;
+    if (!instanceName) {
+      throw new Error(
+        "Conecte uma instância do WhatsApp antes de aplicar o modelo.",
+      );
+    }
+    const resp = await fetch(modelo.imagem_url);
+    if (!resp.ok) throw new Error("Não foi possível baixar a imagem do modelo");
+    const blob = await resp.blob();
+    const ext =
+      (modelo.imagem_url.split(".").pop() || "png")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "") || "png";
+    const file = new File([blob], `imagem.${ext}`, {
+      type: blob.type || "image/png",
+    });
+    return withRequestTimeout(
+      uploadInstanceImage({
+        userId: user.id,
+        instanceName,
+        file,
+        storage: supabase.storage,
+      }),
+      "A aplicação do modelo",
+    );
   };
 
   const handleSave = async () => {
