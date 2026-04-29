@@ -53,6 +53,20 @@ function economiaVsMensal(plano: Plano): string | null {
   return `Economize R$ ${economia.toFixed(2).replace(".", ",")}`;
 }
 
+// Texto explicando o parcelamento no cartão para cada ciclo
+function parcelamentoLabel(ciclo: string | undefined): string {
+  switch (ciclo) {
+    case "trimestral":
+      return "Pague em até 3x no checkout do Asaas (juros do cartão exibidos na hora).";
+    case "semestral":
+      return "Pague em até 6x no checkout do Asaas (juros do cartão exibidos na hora).";
+    case "anual":
+      return "Pague em até 12x no checkout do Asaas (juros do cartão exibidos na hora).";
+    default:
+      return "Pagamento à vista no cartão. Renovação manual a cada ciclo.";
+  }
+}
+
 function CheckoutPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -212,11 +226,11 @@ function CheckoutPage() {
               className="grid gap-2 sm:grid-cols-2"
             >
               {[
-                { v: "PIX" as const, l: "PIX", d: "Aprovação imediata" },
+                { v: "PIX" as const, l: "PIX", d: "Aprovação imediata. Renovação automática a cada ciclo." },
                 {
                   v: "CREDIT_CARD" as const,
                   l: "Cartão de Crédito",
-                  d: "Renovação automática no cartão",
+                  d: parcelamentoLabel(planoSelecionado?.ciclo),
                 },
               ].map((opt) => (
                 <Label
