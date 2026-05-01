@@ -67,8 +67,8 @@ export function LandingPage() {
         <Benefits />
         <HowItWorks />
         <WhyMatters />
-        <Pricing />
         <Testimonials />
+        <Pricing />
         <FAQ />
         <FinalCta />
       </main>
@@ -183,8 +183,8 @@ function Hero() {
             vínculo com seus pacientes
           </h1>
           <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-            Surpreenda seus pacientes, aumente o retorno para sua clínica e gere
-            mais faturamento — sem esforço manual.
+            Surpreenda seus pacientes, aumente o retorno para sua clínica ou
+            consultório e gere mais faturamento — sem esforço manual.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -341,6 +341,16 @@ function Features() {
 function Benefits() {
   return (
     <section id="beneficios" className="py-14">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto mb-10 max-w-2xl text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            Os benefícios para a sua clínica ou consultório
+          </h2>
+          <p className="mt-3 text-muted-foreground">
+            Mais conexão com o paciente e mais resultado para o seu negócio.
+          </p>
+        </div>
+      </div>
       <div className="mx-auto grid max-w-7xl gap-6 px-4 sm:px-6 md:grid-cols-2 lg:px-8">
         {/* Card verde */}
         <Card className="relative gap-0 overflow-hidden border-emerald-200/60 bg-emerald-50/60 p-8 dark:bg-emerald-950/20">
@@ -821,7 +831,7 @@ function Pricing() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Escolha o plano ideal para sua clínica
+            Escolha o plano ideal para sua clínica ou consultório
           </h2>
           <p className="mt-3 text-muted-foreground">
             Pague no PIX ou parcele no cartão de crédito. Cancele quando quiser.
