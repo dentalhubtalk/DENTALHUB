@@ -45,6 +45,7 @@ import prova2 from "@/assets/prova-2.png";
 import prova3 from "@/assets/prova-3.png";
 import prova4 from "@/assets/prova-4.png";
 import prova5 from "@/assets/prova-5.png";
+import logoDentalHub from "@/assets/dentalhub-logo.png";
 import { useRef } from "react";
 import Autoplay from "embla-carousel-autoplay";
 import {
@@ -127,12 +128,11 @@ function Header() {
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-        <Sparkles className="h-5 w-5" />
-      </div>
-      <span className="text-xl font-bold tracking-tight">
-        DENTAL<span className="text-primary">HUB</span>
-      </span>
+      <img
+        src={logoDentalHub}
+        alt="DentalHub"
+        className="h-9 w-auto"
+      />
     </div>
   );
 }
