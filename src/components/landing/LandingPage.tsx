@@ -889,7 +889,7 @@ function Pricing() {
                   onClick={() =>
                     fbTrack("InitiateCheckout", {
                       content_name: p.nome,
-                      value: typeof p.valor === "number" ? p.valor : undefined,
+                      value: p.valor,
                       currency: "BRL",
                     })
                   }
