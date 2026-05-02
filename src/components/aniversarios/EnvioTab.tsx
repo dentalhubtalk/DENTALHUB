@@ -427,7 +427,18 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
     : null;
 
   const handleSend = async () => {
-    if (!user) return;
+    console.log("[EnvioTab] handleSend chamado", {
+      instanceName,
+      instanceStatus,
+      hasConfig: isMensagemConfigurada(config),
+      acessoAtivo,
+      selectedContato,
+      customPhone,
+    });
+    if (!user) {
+      toast.error("Sessão expirada. Faça login novamente.");
+      return;
+    }
     if (!instanceName) {
       toast.error("Conecte o WhatsApp primeiro");
       return;
