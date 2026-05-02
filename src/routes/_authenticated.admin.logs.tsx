@@ -199,7 +199,33 @@ function AdminLogs() {
     staleTime: 30_000,
   });
 
-  const grupos = useMemo(() => agrupar(rows), [rows]);
+  // Busca owner_number (número conectado) de cada instância para mostrar
+  // junto do nome no painel de logs.
+  const { data: instancias = [] } = useQuery({
+    queryKey: ["admin-logs-instancias"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_name, owner_number");
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        instance_name: string;
+        owner_number: string | null;
+      }>;
+    },
+    staleTime: 60_000,
+  });
+
+  const ownerNumberByInstance = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const i of instancias) m.set(i.instance_name, i.owner_number);
+    return m;
+  }, [instancias]);
+
+  const grupos = useMemo(
+    () => agrupar(rows, ownerNumberByInstance),
+    [rows, ownerNumberByInstance],
+  );
   const totalGeral = rows.reduce((s, r) => s + (r.total ?? 0), 0);
   const totalEnviados = rows.reduce((s, r) => s + (r.enviados ?? 0), 0);
   const totalErros = rows.reduce((s, r) => s + (r.erros ?? 0), 0);
