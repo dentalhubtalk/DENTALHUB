@@ -71,6 +71,7 @@ interface ConfigMensagem {
 interface InstanceRow {
   instance_name: string;
   status: string;
+  imagem_url: string | null;
 }
 
 // Throttle do sync de status Evolution: roda no máximo 1×/min por usuário.
@@ -117,7 +118,7 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
       const { data, error } = await withRequestTimeout(
         supabase
           .from("whatsapp_instances")
-          .select("id, instance_name, status")
+          .select("id, instance_name, status, imagem_url")
           .eq("user_id", userId!)
           .maybeSingle(),
         "O carregamento da instância",
@@ -471,6 +472,7 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
       return;
     }
     const phone = normalized.phone;
+    const imagemUrl = config?.imagem_url ?? instanceRow?.imagem_url ?? null;
 
     setSending(true);
     const finalMessage = buildMensagemPreview(mensagemTemplate, nome);
@@ -492,7 +494,7 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
             telefone: phone,
             nomeInstancia: instanceName,
             mensagem: finalMessage,
-            imagemUrl: config?.imagem_url ?? null,
+            imagemUrl,
           },
         }),
         "O acionamento do webhook de teste",
