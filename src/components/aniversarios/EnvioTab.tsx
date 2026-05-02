@@ -760,6 +760,7 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
             return (
               <div className="space-y-2">
                 <Button
+                  type="button"
                   onClick={handleSend}
                   disabled={sending || !!motivoBloqueio}
                   title={motivoBloqueio ?? undefined}
