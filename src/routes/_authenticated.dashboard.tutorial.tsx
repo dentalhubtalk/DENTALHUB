@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,10 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { useAuth } from "@/hooks/use-auth";
+import { useAcessoAtivo } from "@/hooks/use-acesso-ativo";
+import { supabase } from "@/integrations/supabase/client";
+import { isMensagemConfigurada } from "@/components/aniversarios/mensagem-config";
 
 export const Route = createFileRoute("/_authenticated/dashboard/tutorial")({
   component: TutorialPage,
@@ -34,6 +39,8 @@ interface Step {
   seguranca?: string;
   /** Mockup visual da tela correspondente. */
   mockup: React.ReactNode;
+  /** Chave para checar se o passo está concluído. */
+  key: "assinatura" | "whatsapp" | "contatos" | "mensagem" | "envio";
 }
 
 // ----------------------------------------------------------
