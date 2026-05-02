@@ -278,7 +278,72 @@ const STEPS: Step[] = [
   },
 ];
 
+type StepKey = Step["key"];
+
+function useStepStatus(): Record<StepKey, boolean> {
+  const { user } = useAuth();
+  const acesso = useAcessoAtivo();
+  const userId = user?.id;
+
+  const { data: instance } = useQuery({
+    queryKey: ["tutorial:instance", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("whatsapp_instances")
+        .select("status")
+        .eq("user_id", userId!)
+        .maybeSingle();
+      return (data as { status?: string } | null) ?? null;
+    },
+    staleTime: 30_000,
+  });
+
+  const { data: contatosCount } = useQuery({
+    queryKey: ["tutorial:contatos-count", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("contatos")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId!);
+      return count ?? 0;
+    },
+    staleTime: 30_000,
+  });
+
+  const { data: config } = useQuery({
+    queryKey: ["tutorial:config", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("config_mensagem")
+        .select("mensagem")
+        .eq("user_id", userId!)
+        .maybeSingle();
+      return (data as { mensagem?: string | null } | null) ?? null;
+    },
+    staleTime: 30_000,
+  });
+
+  return {
+    assinatura: acesso.ativo,
+    whatsapp: instance?.status === "connected",
+    contatos: (contatosCount ?? 0) > 0,
+    mensagem: isMensagemConfigurada(config),
+    // "envio" depende de tudo acima estar OK (proxy razoável até existir flag dedicada)
+    envio:
+      acesso.ativo &&
+      instance?.status === "connected" &&
+      (contatosCount ?? 0) > 0 &&
+      isMensagemConfigurada(config),
+  };
+}
+
 function TutorialPage() {
+  const stepStatus = useStepStatus();
+  const concluidos = Object.values(stepStatus).filter(Boolean).length;
+  const total = Object.keys(stepStatus).length;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
