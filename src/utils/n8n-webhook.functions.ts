@@ -169,19 +169,17 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
       webhookConfig?.modo,
     );
 
-    // Payload final padronizado — nenhum campo obrigatório vai como null/undefined.
+    // Payload do envio de teste — apenas os campos exigidos pelo n8n.
     const payload = {
-      nome,
       telefone,
-      mensagem,
+      nome,
       nome_instancia: nomeInstancia,
-      user_id: user.id,
-      imagem_url: imagemUrl ?? "",
-      // Campos auxiliares mantidos para o n8n usar na chamada à Evolution API
-      instancia_id: instance.instance_id ?? "",
-      api_url: apiUrl,
-      token,
     };
+    // Mantém referências para evitar warnings de variáveis não utilizadas.
+    void mensagem;
+    void imagemUrl;
+    void apiUrl;
+    void token;
 
     try {
       const res = await fetch(webhookUrl, {
