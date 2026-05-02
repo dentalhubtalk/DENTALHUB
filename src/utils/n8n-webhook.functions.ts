@@ -40,15 +40,6 @@ async function getAuthenticatedSupabase(accessToken: string) {
   return { supabase, user: userData.user };
 }
 
-function getEvolutionConfig() {
-  const url = process.env.EVOLUTION_API_URL;
-  if (!url) throw new Error("EVOLUTION_API_URL is not configured");
-  const key = process.env.EVOLUTION_API_KEY;
-  if (!key) throw new Error("EVOLUTION_API_KEY is not configured");
-  const cleaned = url.replace(/\/$/, "").replace(/\/manager$/i, "");
-  return { url: cleaned, key };
-}
-
 /**
  * Normaliza telefone para o padrão BR esperado pelo n8n/Evolution:
  *  - remove qualquer caractere não numérico
@@ -156,8 +147,6 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
 
     const imagemUrl = sanitizeImagemUrl(instance.imagem_url);
 
-    const { url: apiUrl, key: token } = getEvolutionConfig();
-
     // Resolve URL do webhook (teste ou produção) com base na config do usuário.
     const { data: webhookConfig } = await supabase
       .from("config_webhook")
@@ -177,8 +166,6 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
       mensagem,
       imagem_url: imagemUrl ?? "",
     };
-    void apiUrl;
-    void token;
 
     try {
       const res = await fetch(webhookUrl, {
