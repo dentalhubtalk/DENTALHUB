@@ -357,7 +357,12 @@ function TutorialPage() {
             dos seus pacientes.
           </p>
         </div>
-        <Badge variant="secondary">Tempo: ~10 min</Badge>
+        <div className="flex flex-col items-end gap-2">
+          <Badge variant="secondary">Tempo: ~10 min</Badge>
+          <Badge variant={concluidos === total ? "default" : "outline"}>
+            {concluidos} de {total} concluído{concluidos === 1 ? "" : "s"}
+          </Badge>
+        </div>
       </div>
 
       {/* Visão geral */}
