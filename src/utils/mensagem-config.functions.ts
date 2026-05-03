@@ -85,11 +85,7 @@ export const saveMensagemConfig = createServerFn({ method: "POST" })
       if (modeloErr) throw new Error(`Erro buscando modelo: ${modeloErr.message}`);
       if (!modelo?.imagem_url) throw new Error("Modelo não encontrado.");
 
-      const resp = await fetchWithTimeout(
-        modelo.imagem_url,
-        {},
-        "O download da imagem do modelo",
-      );
+      const resp = await fetchWithTimeout(modelo.imagem_url, {}, "O download da imagem do modelo");
       if (!resp.ok) throw new Error(`Falha ao baixar imagem do modelo (${resp.status})`);
       const blob = await resp.blob();
       const ext = sanitizeExt(modelo.imagem_url);
@@ -147,17 +143,15 @@ export const saveMensagemConfig = createServerFn({ method: "POST" })
     }
 
     // 4) Upsert config_mensagem.
-    const { error: cfgErr } = await supabase
-      .from("config_mensagem")
-      .upsert(
-        {
-          user_id: user.id,
-          mensagem: data.mensagem.trim(),
-          imagem_url: finalImagemUrl,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" },
-      );
+    const { error: cfgErr } = await supabase.from("config_mensagem").upsert(
+      {
+        user_id: user.id,
+        mensagem: data.mensagem.trim(),
+        imagem_url: finalImagemUrl,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
     if (cfgErr) throw new Error(`Erro salvando config_mensagem: ${cfgErr.message}`);
 
     // 5) Update whatsapp_instances.imagem_url.
@@ -177,11 +171,7 @@ export const saveMensagemConfig = createServerFn({ method: "POST" })
         .select("imagem_url, mensagem")
         .eq("user_id", user.id)
         .maybeSingle(),
-      supabase
-        .from("whatsapp_instances")
-        .select("imagem_url")
-        .eq("id", instance.id)
-        .maybeSingle(),
+      supabase.from("whatsapp_instances").select("imagem_url").eq("id", instance.id).maybeSingle(),
     ]);
 
     const cfgImg = cfgRead.data?.imagem_url ?? null;
