@@ -1,72 +1,82 @@
-Pelo que consegui confirmar em modo somente leitura, há um problema claro na implementação atual: o botão chama uma Server Function que apenas confia nos dados passados pelo frontend. Isso deixa o envio dependente do cache/estado da aba e não confirma no servidor se a mensagem e a imagem realmente foram salvas no Supabase antes de disparar para o n8n.
+## Objetivo
 
-Também comparei com o projeto anterior “Dental Hub Dashboard”. Lá, a função do webhook buscava a instância e a `imagem_url` diretamente no Supabase no momento do disparo. Na versão atual, isso foi alterado para enviar `nomeInstancia` e `imagemUrl` vindos da tela. Essa mudança explica a recorrência: se a UI estiver com cache antigo, se a aba Envio não refetchou, ou se a imagem foi salva mas ainda não chegou no estado local, o webhook pode ir sem a URL correta — ou nem chegar ao n8n se a validação/estado do botão falhar antes.
+Alinhar o fluxo "Enviar Teste" do módulo Aniversários ao contrato exato definido na requisição: payload completo com `user_id`, `instancia_id`, `api_url`, `token`, e schema da `envios_whatsapp` ajustado (status restrito a `enviado|erro|pendente`). Manter arquitetura atual (TanStack `createServerFn` + Supabase externo + n8n responsável por chamar Evolution e gravar log).
 
-Plano de correção:
+## Diagnóstico do estado atual
 
-1. Tornar o disparo server-side como era no projeto funcional
-   - Ajustar `src/utils/n8n-webhook.functions.ts` para, após autenticar o usuário, buscar no Supabase em tempo real:
-     - `whatsapp_instances.instance_name`
-     - `whatsapp_instances.instance_id`
-     - `whatsapp_instances.imagem_url`
-     - `config_mensagem.mensagem`
-     - `config_mensagem.imagem_url`
-     - `config_webhook.modo`
-   - O servidor escolherá a imagem com prioridade:
-     1. `config_mensagem.imagem_url`
-     2. `whatsapp_instances.imagem_url`
-     3. string vazia
-   - Assim o webhook não dependerá mais do cache da aba.
+Já existe e funciona conforme spec:
+- Tabela `envios_whatsapp` (migration), com RLS por `user_id`, índices, publicada em `supabase_realtime`.
+- Server function `triggerN8nTestWebhook` em `src/utils/n8n-webhook.functions.ts` com URLs corretas, autenticação via `accessToken`, normalização BR de telefone, render de `{nome}`, sanitização de imagem, leitura de `config_webhook.modo`.
+- `EnvioTab.tsx` com Realtime (INSERT+UPDATE filtrado por `user_id`), reload com retry, toggle teste/produção, envio que chama `triggerN8nTestWebhookFn`.
+- `MensagemTab.tsx` espelhando `imagem_url` em `whatsapp_instances` e `config_mensagem`.
 
-2. Enviar exatamente o payload que você pediu ao n8n
-   - Manter o payload final com estes campos:
-     ```json
-     {
-       "telefone": "string",
-       "nome": "string",
-       "nome_instancia": "string",
-       "mensagem": "string",
-       "imagem_url": "string"
-     }
-     ```
-   - A mensagem será renderizada no servidor substituindo `{nome}`.
-   - O telefone continuará normalizado para o padrão `55DDXXXXXXXXX`.
+Divergências em relação à spec a corrigir:
 
-3. Corrigir a seleção de modo teste/produção
-   - A função server-side usará o `modo` enviado pela tela quando existir, mas também consultará `config_webhook` como fallback.
-   - Isso evita divergência entre “modo selecionado na UI” e “modo salvo no banco”.
+1. **Schema de `envios_whatsapp`**: o CHECK atual aceita `('pendente','enviado','falha_envio','erro')`. A spec exige somente `('enviado','erro','pendente')`. Há também uma policy de UPDATE para o usuário comum, que a spec proíbe (apenas SELECT/INSERT).
+2. **REPLICA IDENTITY FULL**: não está garantido na migration (spec exige).
+3. **Payload enviado ao n8n**: hoje só inclui `{ telefone, nome, nome_instancia, mensagem, imagem_url }`. A spec exige adicionar `user_id`, `instancia_id` (do `whatsapp_instances.instance_id`), `api_url` (de `EVOLUTION_API_URL`, sem barra final e sem sufixo `/manager`), e `token` (de `EVOLUTION_API_KEY`).
+4. **Validação Zod**: hoje vários campos são opcionais. A spec exige `nome`, `telefone`, `mensagem` como obrigatórios; `nomeInstancia`/`imagemUrl`/`modo` deixam de ser parte do contrato (servidor resolve via Supabase). Manter compatibilidade de chamadas atuais sem quebrar a UI.
+5. **Seleção da instância**: o select hoje pega só `id, instance_name, imagem_url`. Precisa incluir `instance_id` para popular `instancia_id` no payload.
 
-4. Adicionar logs úteis e seguros para diagnóstico
-   - Antes de chamar o n8n, registrar no servidor:
-     - modo usado
-     - URL do webhook usada
-     - nome da instância
-     - se havia imagem (`hasImagem`)
-     - origem da imagem (`config_mensagem`, `whatsapp_instances` ou `none`)
-   - Não logar telefone completo nem conteúdo integral da mensagem.
-   - Depois do fetch, registrar status HTTP retornado pelo n8n.
+## Mudanças
 
-5. Melhorar a resposta visual do botão
-   - Após o clique, se a função não chegar ao n8n, o toast mostrará o motivo real retornado pelo servidor.
-   - Se chegar ao n8n mas o n8n responder erro, mostrar o HTTP status e um trecho da resposta.
-   - Se sucesso, mostrar qual modo foi usado e se a imagem foi enviada.
+### A. Migration nova: `supabase-migration-envios-whatsapp-v2.sql`
 
-6. Criar uma função temporária/diagnóstico ou retorno enriquecido para confirmar o payload
-   - Fazer a própria função retornar ao frontend um `debugPayload` sanitizado contendo exatamente o que foi enviado ao n8n.
-   - Isso permitirá eu simular o clique depois e te mostrar aqui o payload real, incluindo a `imagem_url`.
+Idempotente, aplicada por cima da existente:
 
-7. Verificar o armazenamento da imagem
-   - Conferir se `MensagemTab` está persistindo a URL em `config_mensagem.imagem_url` e espelhando em `whatsapp_instances.imagem_url`.
-   - Se necessário, ajustar a query/invalidação para garantir que a aba Envio carregue a imagem recém-salva.
-   - Se a imagem salva vier como URL pública do bucket `imagens-whatsapp`, confirmar que o bucket/policy está público conforme a migration existente.
+- `ALTER TABLE public.envios_whatsapp DROP CONSTRAINT IF EXISTS envios_whatsapp_status_check;`
+- Atualizar dados legados: `UPDATE envios_whatsapp SET status='erro' WHERE status='falha_envio';`
+- `ALTER TABLE ... ADD CONSTRAINT envios_whatsapp_status_check CHECK (status IN ('enviado','erro','pendente'));`
+- `DROP POLICY IF EXISTS "envios_whatsapp_update_own" ON public.envios_whatsapp;` (remover update do usuário; service role do n8n bypassa RLS).
+- `ALTER TABLE public.envios_whatsapp REPLICA IDENTITY FULL;`
+- Reafirmar `ALTER PUBLICATION supabase_realtime ADD TABLE public.envios_whatsapp;` dentro de bloco `DO` que ignora erro se já estiver publicada.
 
-8. Testar após implementar
-   - Simular o clique do botão via navegador/logs ou chamada da Server Function.
-   - Confirmar:
-     - a função server-side foi chamada;
-     - o n8n recebeu resposta HTTP;
-     - o payload enviado contém `telefone`, `nome`, `nome_instancia`, `mensagem`, `imagem_url`;
-     - a `imagem_url` não está vazia quando há imagem salva;
-     - teste e produção retornam mensagens distintas se o n8n estiver inativo/não ouvindo.
+### B. `src/utils/n8n-webhook.functions.ts`
 
-Observação importante: em modo somente leitura eu não consigo consultar diretamente o banco externo porque não há `PGHOST` disponível nesta sessão. Na implementação, vou usar a própria Server Function com o Supabase configurado no projeto e os logs/retornos para confirmar o dado salvo e o payload real.
+- Tornar `nome`, `telefone`, `mensagem` **obrigatórios** no schema Zod; manter `accessToken` obrigatório. Manter `nomeInstancia`/`imagemUrl`/`modo` como opcionais ignorados (compatibilidade retro com chamadas existentes — servidor resolve tudo via Supabase mesmo).
+- No `select` de `whatsapp_instances`, incluir `instance_id`.
+- Ler env vars no handler:
+  ```ts
+  const apiUrlRaw = process.env.EVOLUTION_API_URL;
+  const apiKey = process.env.EVOLUTION_API_KEY;
+  if (!apiUrlRaw || !apiKey) throw new Error("EVOLUTION_API_URL/EVOLUTION_API_KEY ausentes");
+  const apiUrl = apiUrlRaw.replace(/\/+$/, "").replace(/\/manager$/, "");
+  ```
+- Montar o payload final exatamente:
+  ```ts
+  const payload = {
+    nome,
+    telefone,
+    mensagem,
+    nome_instancia: nomeInstancia,
+    user_id: user.id,
+    imagem_url: imagemUrl ?? "",
+    instancia_id: instance.instance_id ?? "",
+    api_url: apiUrl,
+    token: apiKey,
+  };
+  ```
+- Atualizar `debugPayload` para refletir os novos campos sem expor `token` completo (mascarar: `token: "***"`).
+- Logs server (`console.info`) continuam, sem logar telefone completo nem `token`.
+
+### C. `src/components/aniversarios/EnvioTab.tsx`
+
+- Apenas ajustar a chamada a `triggerN8nTestWebhookFn` para enviar somente `{ accessToken, nome, telefone, mensagem }` (parar de mandar `nomeInstancia`, `imagemUrl`, `modo` — servidor resolve). A UI continua mostrando o toggle de modo, mas o envio passa pelo `config_webhook` salvo (que já é o que a UI persiste via "Salvar" do modo). Ajustar texto auxiliar na UI removendo "usará esta URL selecionada agora" para refletir comportamento real (servidor lê do banco).
+- Nenhuma mudança na lógica de Realtime, retry de reload, toasts.
+
+### D. Não alterar
+
+- `MensagemTab.tsx` (já espelha imagem corretamente).
+- `client.ts`, `auth-middleware`, demais rotas.
+
+## Riscos e mitigação
+
+- **Linhas legadas com status `falha_envio`**: convertidas para `erro` pelo UPDATE pré-CHECK na migration.
+- **Token Evolution exposto no payload do webhook**: aceitável porque o n8n é o consumidor confiável e a URL do webhook é privada; o servidor TanStack é quem envia (não o cliente). O `debugPayload` retornado ao frontend mascara o token.
+- **Compatibilidade retro**: o schema Zod aceita os campos antigos como opcionais para não quebrar nada em cache durante deploy.
+
+## Como vou validar após implementar
+
+1. Rodar a migration manualmente no Supabase (instruir usuário).
+2. Usar `stack_modern--invoke-server-function` para simular o clique e inspecionar `debugPayload` retornado (vai conter `instancia_id`, `api_url`, `imagem_url`, modo).
+3. Pedir ao usuário para clicar em "Enviar Teste" e confirmar se o n8n agora recebe o payload completo.
