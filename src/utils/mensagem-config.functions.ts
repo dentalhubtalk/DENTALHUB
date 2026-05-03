@@ -85,7 +85,11 @@ export const saveMensagemConfig = createServerFn({ method: "POST" })
       if (modeloErr) throw new Error(`Erro buscando modelo: ${modeloErr.message}`);
       if (!modelo?.imagem_url) throw new Error("Modelo não encontrado.");
 
-      const resp = await fetch(modelo.imagem_url);
+      const resp = await fetchWithTimeout(
+        modelo.imagem_url,
+        {},
+        "O download da imagem do modelo",
+      );
       if (!resp.ok) throw new Error(`Falha ao baixar imagem do modelo (${resp.status})`);
       const blob = await resp.blob();
       const ext = sanitizeExt(modelo.imagem_url);
@@ -120,9 +124,20 @@ export const saveMensagemConfig = createServerFn({ method: "POST" })
     // 3) Valida acessibilidade da imagem final (HEAD do servidor — sem CORS).
     if (finalImagemUrl) {
       try {
-        const head = await fetch(finalImagemUrl, { method: "HEAD" });
-        if (!head.ok) {
-          throw new Error(`Imagem inacessível (HTTP ${head.status}): ${finalImagemUrl}`);
+        let check = await fetchWithTimeout(
+          finalImagemUrl,
+          { method: "HEAD" },
+          "A validação da imagem",
+        );
+        if (check.status === 405 || check.status === 403) {
+          check = await fetchWithTimeout(
+            finalImagemUrl,
+            { method: "GET", headers: { Range: "bytes=0-0" } },
+            "A validação da imagem",
+          );
+        }
+        if (!check.ok && check.status !== 206) {
+          throw new Error(`Imagem inacessível (HTTP ${check.status}): ${finalImagemUrl}`);
         }
       } catch (err) {
         throw new Error(
