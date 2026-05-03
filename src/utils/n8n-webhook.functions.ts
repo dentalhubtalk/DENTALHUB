@@ -206,6 +206,7 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
 
       const text = await res.text();
 
+      console.log("response.status do webhook:", res.status);
       console.info("[n8n-webhook] resposta", {
         modo: webhookModo,
         status: res.status,
