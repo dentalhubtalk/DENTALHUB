@@ -22,14 +22,13 @@ function resolveWebhookUrl(modo: string | null | undefined): {
 
 const triggerSchema = z.object({
   accessToken: z.string().min(1),
+  // Obrigatórios — conforme contrato definitivo do n8n.
+  nome: z.string().min(1).max(200),
+  telefone: z.string().min(8).max(20),
+  mensagem: z.string().min(1).max(4000),
+  // Opcionais retro-compat — IGNORADOS pelo servidor (resolve via Supabase).
   modo: z.enum(["teste", "producao"]).optional(),
-  // Campos de override opcionais (vindos da UI). Se não vierem, o servidor
-  // resolve TUDO a partir do Supabase — fonte da verdade.
-  nome: z.string().min(1).max(200).optional(),
-  telefone: z.string().min(8).max(20).optional(),
-  // Mantemos compatibilidade com chamadas antigas que ainda passam estes campos:
-  nomeInstancia: z.string().min(1).max(200).optional(),
-  mensagem: z.string().min(1).max(4000).optional(),
+  nomeInstancia: z.string().max(200).optional(),
   imagemUrl: z.string().max(2000).nullish(),
 });
 
@@ -95,10 +94,23 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabase, user } = await getAuthenticatedSupabase(data.accessToken);
 
-    // 1) Instância (nome + imagem espelhada).
+    // 0) Env Evolution — obrigatórias para compor o payload.
+    const apiUrlRaw = process.env.EVOLUTION_API_URL;
+    const apiKey = process.env.EVOLUTION_API_KEY;
+    if (!apiUrlRaw || !apiKey) {
+      throw new Error(
+        "EVOLUTION_API_URL/EVOLUTION_API_KEY ausentes no servidor.",
+      );
+    }
+    const apiUrl = apiUrlRaw
+      .trim()
+      .replace(/\/+$/, "")
+      .replace(/\/manager$/i, "");
+
+    // 1) Instância (nome + instance_id + imagem espelhada).
     const { data: instance, error: instanceError } = await supabase
       .from("whatsapp_instances")
-      .select("id, instance_name, imagem_url")
+      .select("id, instance_name, instance_id, imagem_url")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -201,24 +213,32 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
       imagemFonte = "whatsapp_instances";
     }
 
-    // 7) Payload exatamente como o n8n espera.
+    // 7) Payload exatamente como o n8n espera (contrato definitivo).
     const payload = {
-      telefone,
       nome,
-      nome_instancia: nomeInstancia,
+      telefone,
       mensagem,
+      nome_instancia: nomeInstancia,
+      user_id: user.id,
       imagem_url: imagemUrl ?? "",
+      instancia_id: instance.instance_id ?? "",
+      api_url: apiUrl,
+      token: apiKey,
     };
 
-    // Versão sanitizada para retorno ao frontend (debug).
+    // Versão sanitizada para retorno ao frontend (debug). Nunca expõe token.
     const debugPayload = {
       telefone: telefone.slice(0, 4) + "***" + telefone.slice(-2),
       nome,
       nome_instancia: nomeInstancia,
+      user_id: user.id,
       mensagem_preview: mensagem.slice(0, 80),
       mensagem_len: mensagem.length,
       imagem_url: imagemUrl ?? "",
       imagem_fonte: imagemFonte,
+      instancia_id: instance.instance_id ?? "",
+      api_url: apiUrl,
+      token: "***",
     };
 
     console.info("[n8n-webhook] disparando", {
