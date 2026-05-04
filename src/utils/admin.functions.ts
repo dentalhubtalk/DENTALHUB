@@ -627,8 +627,7 @@ export const adminReconnectInstance = createServerFn({ method: "POST" })
       };
       qrBase64 =
         j.base64 ??
-        (typeof j.qrcode === "object" ? j.qrcode?.base64 ?? null : null) ??
-        null;
+        (typeof j.qrcode === "object" ? (j.qrcode?.base64 ?? null) : null);
       state = j.instance?.state ?? j.state ?? null;
     } catch { /* keep nulls */ }
     return { ok: res.ok, status: res.status, body: text.slice(0, 500), qrBase64, state };
