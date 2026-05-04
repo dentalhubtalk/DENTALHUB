@@ -547,6 +547,7 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
             nome,
             telefone: phone,
             mensagem: finalMessage,
+            modo: webhookModo,
           },
         }),
         "O acionamento do webhook de teste",
@@ -557,6 +558,16 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
       console.log("[EnvioTab] response.status do webhook:", result.status);
       console.log("[EnvioTab] payload/debug retornado:", result.debugPayload);
       console.log("[EnvioTab] resultado do webhook:", result);
+      setLastSend({
+        at: new Date().toISOString(),
+        modo: result.modo,
+        webhookUrl: result.webhookUrl,
+        status: result.status,
+        success: result.success,
+        error: result.error,
+        response: result.response ?? "",
+        debugPayload: (result.debugPayload as Record<string, unknown>) ?? null,
+      });
       if (!result.success) {
         toast.error(result.error, {
           description: result.debugPayload
