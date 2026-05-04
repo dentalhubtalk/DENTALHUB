@@ -136,6 +136,9 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
       modoSalvo = webhookConfig?.modo;
     }
     const { url: webhookUrl, modo: webhookModo } = resolveWebhookUrl(modoSalvo);
+    if (!webhookUrl || !webhookUrl.startsWith("https://")) {
+      throw new Error("Webhook URL inválida");
+    }
 
     // 4) Telefone e nome — dados mínimos vindos da UI.
     if (!data.telefone) throw new Error("Telefone obrigatório.");
@@ -189,8 +192,9 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
       token: apiKey,
     };
 
-    console.log("webhookUrl:", webhookUrl);
-    console.log("Payload enviado:", { ...payload, token: "***" });
+    console.log("=== INÍCIO ENVIO WEBHOOK ===");
+    console.log("URL:", webhookUrl);
+    console.log("PAYLOAD:", { ...payload, token: "***" });
 
     // Versão sanitizada para retorno ao frontend (debug). Nunca expõe token.
     const debugPayload = {
@@ -215,57 +219,55 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
       imagemFonte: "whatsapp_instances",
     });
 
-    console.log("ANTES DO FETCH", webhookUrl, { ...payload, token: "***" });
+    let response: Response | null = null;
+    let errorMsg: string | null = null;
+    let responseText = "";
 
     try {
-      const res = await fetch(webhookUrl, {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      console.log("ANTES DO FETCH");
+
+      response = await fetch(webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       console.log("DEPOIS DO FETCH");
-      console.log("STATUS:", res.status);
+      console.log("STATUS:", response.status);
 
-      const text = await res.text();
+      responseText = await response.text();
+      console.log("RESPOSTA:", responseText);
 
-      console.log("response.status do webhook:", res.status);
       console.info("[n8n-webhook] resposta", {
         modo: webhookModo,
-        status: res.status,
-        ok: res.ok,
-        bodySnippet: text.slice(0, 200),
+        status: response.status,
+        ok: response.ok,
+        bodySnippet: responseText.slice(0, 200),
       });
-
-      if (!res.ok) {
-        return {
-          success: false as const,
-          error: `Webhook n8n (${webhookModo}) respondeu ${res.status}: ${text.slice(0, 500)}`,
-          status: res.status,
-          modo: webhookModo,
-          webhookUrl,
-          debugPayload,
-        };
-      }
-
-      return {
-        success: true as const,
-        status: res.status,
-        response: text.slice(0, 1000),
+    } catch (error) {
+      errorMsg = error instanceof Error ? error.message : String(error);
+      console.error("ERRO NO FETCH:", error);
+      console.error("[n8n-webhook] falha de rede", {
         modo: webhookModo,
-        webhookUrl,
-        debugPayload,
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("ERRO FETCH:", err);
-      console.error("[n8n-webhook] falha de rede", { modo: webhookModo, message });
-      return {
-        success: false as const,
-        error: `Falha ao chamar webhook n8n (${webhookModo}): ${message}`,
-        modo: webhookModo,
-        webhookUrl,
-        debugPayload,
-      };
+        message: errorMsg,
+      });
     }
+
+    return {
+      success: !!response,
+      debug: {
+        webhookUrl,
+        status: response?.status ?? null,
+        erro: errorMsg,
+      },
+      response: responseText.slice(0, 1000),
+      modo: webhookModo,
+      debugPayload,
+    };
   });
