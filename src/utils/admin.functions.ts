@@ -342,6 +342,8 @@ export const adminUsuarios = createServerFn({ method: "POST" })
     const ids = (profiles ?? []).map((p) => p.id);
     const contatosCount: Record<string, number> = {};
     const whatsappStatus: Record<string, string> = {};
+    const instanceNameMap: Record<string, string> = {};
+    const ownerNumberMap: Record<string, string | null> = {};
     const planoStatus: Record<string, string> = {};
 
     if (ids.length > 0) {
@@ -349,7 +351,7 @@ export const adminUsuarios = createServerFn({ method: "POST" })
         supabase.from("contatos").select("user_id").in("user_id", ids),
         supabase
           .from("whatsapp_instances")
-          .select("user_id, status")
+          .select("user_id, status, instance_name, owner_number")
           .in("user_id", ids),
         supabase
           .from("assinaturas")
@@ -359,8 +361,15 @@ export const adminUsuarios = createServerFn({ method: "POST" })
       for (const c of contatosRes.data ?? []) {
         contatosCount[c.user_id] = (contatosCount[c.user_id] ?? 0) + 1;
       }
-      for (const i of instRes.data ?? []) {
+      for (const i of (instRes.data ?? []) as Array<{
+        user_id: string;
+        status: string;
+        instance_name: string;
+        owner_number: string | null;
+      }>) {
         whatsappStatus[i.user_id] = i.status;
+        instanceNameMap[i.user_id] = i.instance_name;
+        ownerNumberMap[i.user_id] = i.owner_number ?? null;
       }
       for (const a of assinRes.data ?? []) {
         if (a.status === "ativa" || a.status === "trial") {
@@ -375,6 +384,8 @@ export const adminUsuarios = createServerFn({ method: "POST" })
         ...p,
         contatos: contatosCount[p.id] ?? 0,
         whatsapp_status: whatsappStatus[p.id] ?? "desconectado",
+        instance_name: instanceNameMap[p.id] ?? null,
+        owner_number: ownerNumberMap[p.id] ?? null,
         plano: planoStatus[p.id] ?? "Gratuito",
       })),
     };
@@ -562,3 +573,74 @@ export const adminToggleCortesia = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { userId: data.userId, acessoCortesia: data.acessoCortesia };
   });
+
+// ============================================================
+// adminLogoutInstance — desconecta a instância na Evolution API,
+// SEM apagar o registro no banco. O instance_name continua igual
+// e pode ser reconectado depois.
+// ============================================================
+export const adminLogoutInstance = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      accessToken: z.string().min(1),
+      instanceName: z.string().min(1),
+    }),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.accessToken);
+    const baseUrl = process.env.EVOLUTION_API_URL;
+    const apiKey = process.env.EVOLUTION_API_KEY;
+    if (!baseUrl || !apiKey) throw new Error("Evolution API não configurada");
+    const cleaned = baseUrl.replace(/\/+$/, "");
+    const url = `${cleaned}/instance/logout/${encodeURIComponent(data.instanceName)}`;
+    const res = await fetch(url, { method: "DELETE", headers: { apikey: apiKey } });
+    const text = await res.text();
+    console.log("[admin] logout ←", res.status, text.slice(0, 200));
+
+    const admin = getSupabaseAdmin();
+    await admin
+      .from("whatsapp_instances")
+      .update({ status: "disconnected", updated_at: new Date().toISOString() })
+      .eq("instance_name", data.instanceName);
+
+    return { ok: res.ok, status: res.status, body: text.slice(0, 500) };
+  });
+
+// ============================================================
+// adminReconnectInstance — força reconexão (gera novo QR)
+// na MESMA instância. Não recria.
+// ============================================================
+export const adminReconnectInstance = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      accessToken: z.string().min(1),
+      instanceName: z.string().min(1),
+    }),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.accessToken);
+    const baseUrl = process.env.EVOLUTION_API_URL;
+    const apiKey = process.env.EVOLUTION_API_KEY;
+    if (!baseUrl || !apiKey) throw new Error("Evolution API não configurada");
+    const cleaned = baseUrl.replace(/\/+$/, "");
+    const url = `${cleaned}/instance/connect/${encodeURIComponent(data.instanceName)}`;
+    const res = await fetch(url, { headers: { apikey: apiKey } });
+    const text = await res.text();
+    console.log("[admin] reconnect ←", res.status, text.slice(0, 200));
+    let qrBase64: string | null = null;
+    let state: string | null = null;
+    try {
+      const j = JSON.parse(text) as {
+        base64?: string;
+        qrcode?: { base64?: string; code?: string } | string;
+        instance?: { state?: string };
+        state?: string;
+      };
+      qrBase64 =
+        j.base64 ??
+        (typeof j.qrcode === "object" ? (j.qrcode?.base64 ?? null) : null);
+      state = j.instance?.state ?? j.state ?? null;
+    } catch { /* keep nulls */ }
+    return { ok: res.ok, status: res.status, body: text.slice(0, 500), qrBase64, state };
+  });
+

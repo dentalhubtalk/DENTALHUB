@@ -5,6 +5,9 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   adminUsuarios,
   adminToggleCortesia,
+  adminRefreshInstanceStatus,
+  adminLogoutInstance,
+  adminReconnectInstance,
 } from "@/utils/admin.functions";
 import {
   Search,
@@ -13,6 +16,9 @@ import {
   Loader2,
   Phone,
   Gift,
+  RefreshCw,
+  LogOut,
+  QrCode,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +39,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { formatDateBR } from "@/lib/date-format";
@@ -45,6 +52,8 @@ interface UsuarioRow {
   created_at: string;
   contatos: number;
   whatsapp_status: string;
+  instance_name: string | null;
+  owner_number: string | null;
   plano: string;
   nome_responsavel: string | null;
   nome_clinica: string | null;
@@ -118,6 +127,36 @@ function AdminUsuarios() {
     onError: (err: Error) => {
       toast.error("Erro ao atualizar cortesia: " + err.message);
     },
+  });
+
+  const [qrDialog, setQrDialog] = useState<{ instance: string; qr: string | null; status: number; body: string } | null>(null);
+
+  const refreshMutation = useMutation({
+    mutationFn: (instanceName: string) =>
+      adminRefreshInstanceStatus({ data: { accessToken, instanceName } }),
+    onSuccess: (res) => {
+      toast.success(`Status: ${res.status}${res.owner_number ? ` — ${res.owner_number}` : ""}`);
+      queryClient.invalidateQueries({ queryKey: ["admin-usuarios"] });
+    },
+    onError: (err: Error) => toast.error("Erro: " + err.message),
+  });
+  const logoutMutation = useMutation({
+    mutationFn: (instanceName: string) =>
+      adminLogoutInstance({ data: { accessToken, instanceName } }),
+    onSuccess: (res) => {
+      toast.success(`Instância desconectada (HTTP ${res.status}).`);
+      queryClient.invalidateQueries({ queryKey: ["admin-usuarios"] });
+    },
+    onError: (err: Error) => toast.error("Erro ao desconectar: " + err.message),
+  });
+  const reconnectMutation = useMutation({
+    mutationFn: (instanceName: string) =>
+      adminReconnectInstance({ data: { accessToken, instanceName } }),
+    onSuccess: (res, instanceName) => {
+      setQrDialog({ instance: instanceName, qr: res.qrBase64, status: res.status, body: res.body });
+      queryClient.invalidateQueries({ queryKey: ["admin-usuarios"] });
+    },
+    onError: (err: Error) => toast.error("Erro ao reconectar: " + err.message),
   });
 
   const usuarios = (data?.usuarios ?? []) as UsuarioRow[];

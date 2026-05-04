@@ -164,8 +164,16 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
       throw new Error("imagem_url está vazio - upload não encontrado");
     }
     // Valida acessibilidade real (sem CORS — request do servidor).
+    // Timeout de 5s para não travar a server function caso o storage esteja lento.
     try {
-      const head = await fetch(imagemUrl, { method: "HEAD" });
+      const headCtl = new AbortController();
+      const headTo = setTimeout(() => headCtl.abort(), 5000);
+      let head: Response;
+      try {
+        head = await fetch(imagemUrl, { method: "HEAD", signal: headCtl.signal });
+      } finally {
+        clearTimeout(headTo);
+      }
       console.log("[n8n-webhook] HEAD imagem_url", { imagemUrl, status: head.status });
       if (!head.ok) {
         throw new Error(
@@ -173,8 +181,10 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
         );
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isAbort = err instanceof Error && err.name === "AbortError";
       throw new Error(
-        `Falha validando imagem_url: ${err instanceof Error ? err.message : String(err)}`,
+        `Falha validando imagem_url${isAbort ? " (timeout 5s)" : ""}: ${msg}`,
       );
     }
 
@@ -251,7 +261,12 @@ export const triggerN8nTestWebhook = createServerFn({ method: "POST" })
         bodySnippet: responseText.slice(0, 200),
       });
     } catch (error) {
-      errorMsg = error instanceof Error ? error.message : String(error);
+      const isAbort = error instanceof Error && error.name === "AbortError";
+      errorMsg = isAbort
+        ? `Timeout (10s) chamando o webhook n8n (${webhookModo}). O servidor não respondeu a tempo.`
+        : error instanceof Error
+          ? error.message
+          : String(error);
       console.error("ERRO NO FETCH:", error);
       console.error("[n8n-webhook] falha de rede", {
         modo: webhookModo,

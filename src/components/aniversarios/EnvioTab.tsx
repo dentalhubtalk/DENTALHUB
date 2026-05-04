@@ -96,9 +96,33 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
 
   // Mantido em sincronia com src/utils/n8n-webhook.functions.ts.
   const WEBHOOK_URLS = {
-    teste: "https://n8n.vendavocenegocios.com.br/webhook-test/enviar-teste",
-    producao: "https://webhook.vendavocenegocios.com.br/webhook/enviar-teste",
+    teste: "https://n8n.vendavocenegocios.com.br/webhook-test/1a26f671-f9b2-4c65-b6a2-33000350a7a4",
+    producao: "https://webhook.vendavocenegocios.com.br/webhook/1a26f671-f9b2-4c65-b6a2-33000350a7a4",
   } as const;
+
+  type DiagResult = {
+    url: string;
+    method: string;
+    ok: boolean;
+    status: number | null;
+    durationMs: number;
+    error: string | null;
+    errorName: string | null;
+  };
+  const [diagResults, setDiagResults] = useState<DiagResult[] | null>(null);
+  const [diagRunning, setDiagRunning] = useState(false);
+
+  type LastSend = {
+    at: string;
+    modo: "teste" | "producao";
+    webhookUrl: string;
+    status: number | null;
+    success: boolean;
+    error: string | null;
+    response: string;
+    debugPayload: Record<string, unknown> | null;
+  };
+  const [lastSend, setLastSend] = useState<LastSend | null>(null);
 
   const getAccessToken = useCallback(async () => {
     const {
@@ -523,6 +547,7 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
             nome,
             telefone: phone,
             mensagem: finalMessage,
+            modo: webhookModo,
           },
         }),
         "O acionamento do webhook de teste",
@@ -533,6 +558,16 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
       console.log("[EnvioTab] response.status do webhook:", result.status);
       console.log("[EnvioTab] payload/debug retornado:", result.debugPayload);
       console.log("[EnvioTab] resultado do webhook:", result);
+      setLastSend({
+        at: new Date().toISOString(),
+        modo: result.modo,
+        webhookUrl: result.webhookUrl,
+        status: result.status,
+        success: result.success,
+        error: result.error,
+        response: result.response ?? "",
+        debugPayload: (result.debugPayload as Record<string, unknown>) ?? null,
+      });
       if (!result.success) {
         toast.error(result.error, {
           description: result.debugPayload
@@ -544,9 +579,9 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
       }
 
       toast.success(
-        `Disparo enviado ao n8n (${result.modo === "producao" ? "Produção" : "Teste"}) para ${nome}.`,
+        `Webhook ${result.modo === "producao" ? "Produção" : "Teste"} aceitou (${result.status ?? "—"}).`,
         {
-          description: "Payload enviado com imagem_url da instância salva no banco.",
+          description: "Aguardando o n8n registrar o envio em envios_whatsapp.",
           duration: 6000,
         },
       );
@@ -813,24 +848,29 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={diagRunning}
                     onClick={async () => {
+                      setDiagRunning(true);
                       const tid = toast.loading("Diagnosticando rede...");
                       try {
                         const res = await diagnoseNetwork();
                         console.log("[net-diag] resultado:", res);
                         console.table(res.results);
+                        setDiagResults(res.results as DiagResult[]);
                         const fails = res.results.filter((r) => !r.ok);
                         toast.success(
-                          `Diagnóstico concluído: ${res.results.length - fails.length}/${res.results.length} OK. Veja o console.`,
+                          `Diagnóstico: ${res.results.length - fails.length}/${res.results.length} OK.`,
                           { id: tid },
                         );
                       } catch (e) {
                         console.error("[net-diag] erro", e);
                         toast.error(`Falha no diagnóstico: ${e instanceof Error ? e.message : String(e)}`, { id: tid });
+                      } finally {
+                        setDiagRunning(false);
                       }
                     }}
                   >
-                    Diagnosticar rede
+                    {diagRunning ? "Diagnosticando..." : "Diagnosticar rede"}
                   </Button>
                 </div>
                 {motivoBloqueio && (
@@ -841,6 +881,93 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
           })()}
         </CardContent>
       </Card>
+
+      {lastSend && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Último envio de teste</CardTitle>
+            <CardDescription>
+              {formatDateTimeBR(lastSend.at)} — modo{" "}
+              <strong>{lastSend.modo === "producao" ? "Produção" : "Teste"}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={lastSend.success ? "default" : "destructive"}>
+                {lastSend.success ? "OK" : "Falha"}
+              </Badge>
+              <Badge variant="secondary">HTTP {lastSend.status ?? "—"}</Badge>
+            </div>
+            <div className="rounded-md border bg-muted/30 p-2">
+              <p className="text-xs text-muted-foreground">Webhook</p>
+              <code className="break-all text-xs">{lastSend.webhookUrl}</code>
+            </div>
+            {lastSend.error && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2">
+                <p className="text-xs font-medium text-destructive">Erro</p>
+                <p className="text-xs text-destructive whitespace-pre-wrap">{lastSend.error}</p>
+              </div>
+            )}
+            {lastSend.debugPayload && (
+              <details className="rounded-md border bg-muted/20 p-2">
+                <summary className="cursor-pointer text-xs font-medium">Payload enviado (sanitizado)</summary>
+                <pre className="mt-2 overflow-auto text-[10px]">
+                  {JSON.stringify(lastSend.debugPayload, null, 2)}
+                </pre>
+              </details>
+            )}
+            {lastSend.response && (
+              <details className="rounded-md border bg-muted/20 p-2">
+                <summary className="cursor-pointer text-xs font-medium">Resposta do n8n</summary>
+                <pre className="mt-2 overflow-auto text-[10px]">{lastSend.response}</pre>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {diagResults && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Diagnóstico de rede (servidor → externo)</CardTitle>
+            <CardDescription>
+              Cada linha é uma requisição feita pela server function. Se o n8n falhar mas Google/1.1.1.1 funcionarem, o bloqueio é específico do host.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>URL</TableHead>
+                  <TableHead>Método</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Tempo</TableHead>
+                  <TableHead>Resultado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {diagResults.map((r, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-mono text-[10px] break-all max-w-[260px]">{r.url}</TableCell>
+                    <TableCell className="text-xs">{r.method}</TableCell>
+                    <TableCell className="text-xs">{r.status ?? "—"}</TableCell>
+                    <TableCell className="text-xs">{r.durationMs}ms</TableCell>
+                    <TableCell>
+                      {r.ok ? (
+                        <Badge>OK</Badge>
+                      ) : (
+                        <Badge variant="destructive" title={r.error ?? ""}>
+                          {r.errorName ?? `HTTP ${r.status ?? "?"}`}
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
