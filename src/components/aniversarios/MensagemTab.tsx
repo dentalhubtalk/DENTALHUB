@@ -283,8 +283,13 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
         }
       } else if (selectedModelo) {
         // Modelo da galeria: usa URL direta (já é pública).
+        console.log("[MensagemTab] -> caminho MODELO");
         finalImagemUrl = selectedModelo.imagem_url;
         console.log("[MensagemTab] usando URL do modelo:", finalImagemUrl);
+      } else {
+        // Sem nova imagem: mantém o que já está salvo (pode ser null).
+        console.log("[MensagemTab] -> caminho SEM ALTERAÇÃO de imagem (mantém URL existente)");
+        finalImagemUrl = imagemUrl;
       }
 
       // ===== ETAPA 3: SALVAR NO BANCO (ambas as tabelas) =====
