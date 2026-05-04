@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { getInstanceStatus } from "@/utils/evolution.functions";
 import { triggerN8nTestWebhook } from "@/utils/n8n-webhook.functions";
+import { diagnoseNetwork } from "@/utils/network-diagnostic.functions";
 import { normalizePhoneBR } from "@/components/aniversarios/phone-utils";
 import { formatDateTimeBR } from "@/lib/date-format";
 import { Send, MessageSquare, AlertCircle, History, Webhook } from "lucide-react";
@@ -799,15 +800,39 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
                 : null;
             return (
               <div className="space-y-2">
-                <Button
-                  type="button"
-                  onClick={handleSend}
-                  disabled={sending || !!motivoBloqueio}
-                  title={motivoBloqueio ?? undefined}
-                >
-                  <Send className="mr-2 h-4 w-4" />
-                  {sending ? "Enviando..." : "Enviar Teste"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    onClick={handleSend}
+                    disabled={sending || !!motivoBloqueio}
+                    title={motivoBloqueio ?? undefined}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    {sending ? "Enviando..." : "Enviar Teste"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      const tid = toast.loading("Diagnosticando rede...");
+                      try {
+                        const res = await diagnoseNetwork();
+                        console.log("[net-diag] resultado:", res);
+                        console.table(res.results);
+                        const fails = res.results.filter((r) => !r.ok);
+                        toast.success(
+                          `Diagnóstico concluído: ${res.results.length - fails.length}/${res.results.length} OK. Veja o console.`,
+                          { id: tid },
+                        );
+                      } catch (e) {
+                        console.error("[net-diag] erro", e);
+                        toast.error(`Falha no diagnóstico: ${e instanceof Error ? e.message : String(e)}`, { id: tid });
+                      }
+                    }}
+                  >
+                    Diagnosticar rede
+                  </Button>
+                </div>
                 {motivoBloqueio && (
                   <p className="text-xs text-destructive">{motivoBloqueio}</p>
                 )}
