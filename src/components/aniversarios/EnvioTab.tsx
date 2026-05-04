@@ -96,9 +96,33 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
 
   // Mantido em sincronia com src/utils/n8n-webhook.functions.ts.
   const WEBHOOK_URLS = {
-    teste: "https://n8n.vendavocenegocios.com.br/webhook-test/enviar-teste",
-    producao: "https://webhook.vendavocenegocios.com.br/webhook/enviar-teste",
+    teste: "https://n8n.vendavocenegocios.com.br/webhook-test/1a26f671-f9b2-4c65-b6a2-33000350a7a4",
+    producao: "https://webhook.vendavocenegocios.com.br/webhook/1a26f671-f9b2-4c65-b6a2-33000350a7a4",
   } as const;
+
+  type DiagResult = {
+    url: string;
+    method: string;
+    ok: boolean;
+    status: number | null;
+    durationMs: number;
+    error: string | null;
+    errorName: string | null;
+  };
+  const [diagResults, setDiagResults] = useState<DiagResult[] | null>(null);
+  const [diagRunning, setDiagRunning] = useState(false);
+
+  type LastSend = {
+    at: string;
+    modo: "teste" | "producao";
+    webhookUrl: string;
+    status: number | null;
+    success: boolean;
+    error: string | null;
+    response: string;
+    debugPayload: Record<string, unknown> | null;
+  };
+  const [lastSend, setLastSend] = useState<LastSend | null>(null);
 
   const getAccessToken = useCallback(async () => {
     const {
