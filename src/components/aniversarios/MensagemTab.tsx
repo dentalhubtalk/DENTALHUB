@@ -218,10 +218,21 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
 
     setSaving(true);
     try {
-      let finalImagemUrl: string | null = imagemUrl;
+      // ===== LOGS OBRIGATÓRIOS =====
+      console.log("[MensagemTab] handleSave chamado");
+      console.log("[MensagemTab] pendingFile:", pendingFile);
+      console.log("[MensagemTab] selectedModelo:", selectedModelo);
+      console.log("[MensagemTab] imagemUrl atual:", imagemUrl);
 
-      // ===== ETAPA 1: UPLOAD (se houver arquivo novo) =====
+      let finalImagemUrl: string | null = null;
+
+      // ===== ETAPA 1: PRIORIDADE ESTRITA =====
+      // 1) pendingFile  -> SEMPRE faz upload (nunca reusa URL antiga)
+      // 2) selectedModelo -> usa URL pública do modelo
+      // 3) imagemUrl pré-existente -> mantém (apenas atualizando texto)
+      // 4) nenhum dos três -> sem imagem (null)
       if (pendingFile) {
+        console.log("[MensagemTab] -> caminho UPLOAD (pendingFile presente)");
         if (!pendingFile.type.startsWith("image/")) {
           throw new Error("Arquivo inválido (não é imagem).");
         }
@@ -272,8 +283,13 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
         }
       } else if (selectedModelo) {
         // Modelo da galeria: usa URL direta (já é pública).
+        console.log("[MensagemTab] -> caminho MODELO");
         finalImagemUrl = selectedModelo.imagem_url;
         console.log("[MensagemTab] usando URL do modelo:", finalImagemUrl);
+      } else {
+        // Sem nova imagem: mantém o que já está salvo (pode ser null).
+        console.log("[MensagemTab] -> caminho SEM ALTERAÇÃO de imagem (mantém URL existente)");
+        finalImagemUrl = imagemUrl;
       }
 
       // ===== ETAPA 3: SALVAR NO BANCO (ambas as tabelas) =====
