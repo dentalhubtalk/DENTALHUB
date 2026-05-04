@@ -579,9 +579,9 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
       }
 
       toast.success(
-        `Disparo enviado ao n8n (${result.modo === "producao" ? "Produção" : "Teste"}) para ${nome}.`,
+        `Webhook ${result.modo === "producao" ? "Produção" : "Teste"} aceitou (${result.status ?? "—"}).`,
         {
-          description: "Payload enviado com imagem_url da instância salva no banco.",
+          description: "Aguardando o n8n registrar o envio em envios_whatsapp.",
           duration: 6000,
         },
       );
