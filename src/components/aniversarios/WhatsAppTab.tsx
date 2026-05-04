@@ -762,6 +762,46 @@ export function WhatsAppTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
         </Card>
       )}
 
+      {/* Popup automático: desconectado + QR disponível → destaca a leitura */}
+      <Dialog
+        open={Boolean(qrCode && instance.status !== "connected")}
+        onOpenChange={(open) => {
+          if (!open) setQrCode(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <WifiOff className="h-5 w-5 text-destructive" />
+              WhatsApp desconectado
+            </DialogTitle>
+            <DialogDescription>
+              Sua instância está desconectada. Escaneie o QR Code abaixo no
+              WhatsApp do celular para reconectar.
+            </DialogDescription>
+          </DialogHeader>
+          {qrCode && (
+            <div className="flex flex-col items-center gap-3">
+              <div className="rounded-lg border bg-white p-3">
+                <img
+                  src={
+                    qrCode.startsWith("data:")
+                      ? qrCode
+                      : `data:image/png;base64,${qrCode}`
+                  }
+                  alt="QR Code WhatsApp"
+                  className="h-64 w-64"
+                />
+              </div>
+              <Button size="sm" variant="outline" onClick={handleCheckStatus}>
+                <RefreshCw className="mr-1 h-4 w-4" />
+                Já escaneei, verificar conexão
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {qrError && instance.status !== "connected" && (
         <Card className="border-destructive/40">
           <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
