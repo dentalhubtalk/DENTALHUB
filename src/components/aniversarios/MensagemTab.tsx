@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { saveMensagemConfig } from "@/utils/mensagem-config.functions";
 import { MessageSquare, Upload, Save, ImageIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,10 +16,6 @@ import {
   getAniversariosErrorMessage,
   withRequestTimeout,
 } from "@/components/aniversarios/request-utils";
-import {
-  assertPersistableImageUrl,
-  uploadInstanceImage,
-} from "@/components/aniversarios/imagem-upload";
 import { ModelosGaleria, type ModeloMensagem } from "@/components/aniversarios/ModelosGaleria";
 
 interface ConfigMensagem {
@@ -33,7 +27,7 @@ interface ConfigMensagem {
 export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const saveMensagemConfigFn = useServerFn(saveMensagemConfig);
+  
   const userId = user?.id;
   const fileRef = useRef<HTMLInputElement>(null);
   const [mensagem, setMensagem] = useState(DEFAULT_MENSAGEM_ANIVERSARIO);
@@ -182,27 +176,6 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
     }
   };
 
-  const uploadPendingFile = async () => {
-    if (!user || !pendingFile) return imagemUrl;
-
-    const instanceName = instanceQuery.data?.instance_name;
-    if (!instanceName) {
-      throw new Error("Conecte uma instância do WhatsApp antes de enviar a imagem.");
-    }
-
-    // Lógica pura testada em `imagem-upload.test.ts`:
-    // path estável por instância + upsert + cleanup + cache-buster.
-    return withRequestTimeout(
-      uploadInstanceImage({
-        userId: user.id,
-        instanceName,
-        file: pendingFile,
-        storage: supabase.storage,
-      }),
-      "O upload da imagem",
-    );
-  };
-
   const handleRemoveImage = async () => {
     setLocalPreviewUrl((current) => {
       if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
@@ -224,59 +197,146 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
     }
   };
 
-  const getAccessToken = async () => {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
-    return token;
-  };
 
   const handleSave = async () => {
-    if (!user) return;
+    // ===== VALIDAÇÕES OBRIGATÓRIAS =====
+    if (!user?.id) {
+      toast.error("Usuário não autenticado");
+      return;
+    }
     if (!mensagem.trim()) {
       toast.error("Digite uma mensagem");
       return;
     }
+
+    const instanceName = instanceQuery.data?.instance_name;
+    const instanceId = instanceQuery.data?.id;
+    if (!instanceName || !instanceId) {
+      toast.error("Conecte uma instância do WhatsApp antes de salvar.");
+      return;
+    }
+
     setSaving(true);
     try {
-      let uploadedUrl: string | null = imagemUrl;
+      let finalImagemUrl: string | null = imagemUrl;
 
-      // Caso 1: upload de arquivo próprio — feito pelo cliente (RLS por folder).
+      // ===== ETAPA 1: UPLOAD (se houver arquivo novo) =====
       if (pendingFile) {
-        try {
-          uploadedUrl = await uploadPendingFile();
-          assertPersistableImageUrl(uploadedUrl, true);
-        } catch (uploadErr) {
-          console.error("[MensagemTab] upload falhou", uploadErr);
-          toast.error(
-            getAniversariosErrorMessage(uploadErr) || "Falha ao enviar a imagem. Tente novamente.",
-          );
-          setSaving(false);
-          return;
+        if (!pendingFile.type.startsWith("image/")) {
+          throw new Error("Arquivo inválido (não é imagem).");
         }
+
+        // Path FIXO por instância — sempre sobrescreve com upsert.
+        const ext = (pendingFile.name.split(".").pop() || "png")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "") || "png";
+        const path = `${user.id}/${instanceName}/imagem.${ext}`;
+
+        console.log("[MensagemTab] UPLOAD iniciando:", {
+          path,
+          size: pendingFile.size,
+          type: pendingFile.type,
+        });
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("imagens-whatsapp")
+          .upload(path, pendingFile, {
+            upsert: true,
+            contentType: pendingFile.type || "image/png",
+            cacheControl: "0",
+          });
+
+        console.log("[MensagemTab] UPLOAD resultado:", { path, uploadData, uploadError });
+
+        if (uploadError) {
+          throw new Error(`Falha no upload: ${uploadError.message}`);
+        }
+
+        // ===== ETAPA 2: GERAR URL PÚBLICA =====
+        const { data: pub } = supabase.storage
+          .from("imagens-whatsapp")
+          .getPublicUrl(path);
+
+        if (!pub?.publicUrl) {
+          throw new Error("Falha ao gerar imagem_url");
+        }
+
+        finalImagemUrl = `${pub.publicUrl}?v=${Date.now()}`;
+        console.log("[MensagemTab] URL gerada:", finalImagemUrl);
+
+        // Limpa imagens antigas com outra extensão.
+        try {
+          await cleanupInstanceImages(instanceName, path);
+        } catch (cleanupErr) {
+          console.warn("[MensagemTab] cleanup falhou (não bloqueante)", cleanupErr);
+        }
+      } else if (selectedModelo) {
+        // Modelo da galeria: usa URL direta (já é pública).
+        finalImagemUrl = selectedModelo.imagem_url;
+        console.log("[MensagemTab] usando URL do modelo:", finalImagemUrl);
       }
 
-      // Server function é a fonte da verdade: salva config_mensagem +
-      // whatsapp_instances.imagem_url e relê para confirmar.
-      const accessToken = await getAccessToken();
-      const result = await withRequestTimeout(
-        saveMensagemConfigFn({
-          data: {
-            accessToken,
-            mensagem: mensagem.trim(),
-            // Evita travar copiando modelo no servidor: a URL escolhida é a
-            // fonte final salva no banco; upload próprio já foi gravado acima.
-            imagemUrl: selectedModelo?.imagem_url ?? uploadedUrl,
-            modeloId: null,
-          },
-        }),
-        "O salvamento da configuração",
-        20000,
+      // ===== ETAPA 3: SALVAR NO BANCO (ambas as tabelas) =====
+      console.log("[MensagemTab] gravando no banco:", {
+        user_id: user.id,
+        instance_name: instanceName,
+        imagem_url: finalImagemUrl,
+      });
+
+      // 3a) whatsapp_instances
+      const { error: instErr } = await supabase
+        .from("whatsapp_instances")
+        .update({ imagem_url: finalImagemUrl })
+        .eq("user_id", user.id)
+        .eq("instance_name", instanceName);
+
+      if (instErr) {
+        throw new Error(`Erro atualizando whatsapp_instances: ${instErr.message}`);
+      }
+
+      // 3b) config_mensagem (upsert por user_id)
+      const { error: cfgErr } = await supabase.from("config_mensagem").upsert(
+        {
+          user_id: user.id,
+          mensagem: mensagem.trim(),
+          imagem_url: finalImagemUrl,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
       );
 
-      console.log("[MensagemTab] save confirmado pelo servidor:", result);
+      if (cfgErr) {
+        throw new Error(`Erro salvando config_mensagem: ${cfgErr.message}`);
+      }
 
-      setImagemUrl(result.imagemUrl);
+      // ===== ETAPA 4: RELER PARA CONFIRMAR =====
+      const [{ data: cfgRead }, { data: instRead }] = await Promise.all([
+        supabase
+          .from("config_mensagem")
+          .select("imagem_url, mensagem")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("whatsapp_instances")
+          .select("imagem_url")
+          .eq("id", instanceId)
+          .maybeSingle(),
+      ]);
+
+      console.log("[MensagemTab] confirmação no banco:", {
+        config_mensagem: cfgRead,
+        whatsapp_instances: instRead,
+        esperado: finalImagemUrl,
+      });
+
+      if (cfgRead?.imagem_url !== finalImagemUrl || instRead?.imagem_url !== finalImagemUrl) {
+        throw new Error(
+          `Persistência inconsistente. cfg=${cfgRead?.imagem_url} inst=${instRead?.imagem_url} esperado=${finalImagemUrl}`,
+        );
+      }
+
+      // ===== ETAPA 5: ATUALIZAR ESTADO LOCAL =====
+      setImagemUrl(finalImagemUrl);
       lastSyncedIdRef.current = null;
 
       await Promise.all([
@@ -292,7 +352,7 @@ export function MensagemTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
         if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
         return null;
       });
-      toast.success("Mensagem salva e confirmada no banco!");
+      toast.success("Imagem e mensagem salvas no banco!");
     } catch (err) {
       console.error("[MensagemTab] erro ao salvar configuração", err);
       toast.error(getAniversariosErrorMessage(err));
