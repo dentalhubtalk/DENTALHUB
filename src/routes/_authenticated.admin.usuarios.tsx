@@ -129,6 +129,36 @@ function AdminUsuarios() {
     },
   });
 
+  const [qrDialog, setQrDialog] = useState<{ instance: string; qr: string | null; status: number; body: string } | null>(null);
+
+  const refreshMutation = useMutation({
+    mutationFn: (instanceName: string) =>
+      adminRefreshInstanceStatus({ data: { accessToken, instanceName } }),
+    onSuccess: (res) => {
+      toast.success(`Status: ${res.status}${res.owner_number ? ` — ${res.owner_number}` : ""}`);
+      queryClient.invalidateQueries({ queryKey: ["admin-usuarios"] });
+    },
+    onError: (err: Error) => toast.error("Erro: " + err.message),
+  });
+  const logoutMutation = useMutation({
+    mutationFn: (instanceName: string) =>
+      adminLogoutInstance({ data: { accessToken, instanceName } }),
+    onSuccess: (res) => {
+      toast.success(`Instância desconectada (HTTP ${res.status}).`);
+      queryClient.invalidateQueries({ queryKey: ["admin-usuarios"] });
+    },
+    onError: (err: Error) => toast.error("Erro ao desconectar: " + err.message),
+  });
+  const reconnectMutation = useMutation({
+    mutationFn: (instanceName: string) =>
+      adminReconnectInstance({ data: { accessToken, instanceName } }),
+    onSuccess: (res, instanceName) => {
+      setQrDialog({ instance: instanceName, qr: res.qrBase64, status: res.status, body: res.body });
+      queryClient.invalidateQueries({ queryKey: ["admin-usuarios"] });
+    },
+    onError: (err: Error) => toast.error("Erro ao reconectar: " + err.message),
+  });
+
   const usuarios = (data?.usuarios ?? []) as UsuarioRow[];
   const filtered = usuarios.filter((p) => {
     const term = search.toLowerCase();
