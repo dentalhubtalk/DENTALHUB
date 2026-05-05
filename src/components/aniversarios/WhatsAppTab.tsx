@@ -6,7 +6,6 @@ import {
   createInstance,
   getQrCode,
   getInstanceStatus,
-  configureInstanceWebhook,
 } from "@/utils/evolution.functions";
 import {
   Smartphone,
@@ -89,7 +88,6 @@ export function WhatsAppTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
   const [connecting, setConnecting] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [configuringWebhook, setConfiguringWebhook] = useState(false);
   const [qrError, setQrError] = useState<string | null>(null);
   const [steps, setSteps] =
     useState<Record<StepKey, StepState>>(INITIAL_STEPS);
@@ -502,35 +500,7 @@ export function WhatsAppTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = 
     }
   };
 
-  const handleConfigureWebhook = async () => {
-    if (!instance) return;
-    setConfiguringWebhook(true);
-    try {
-      const accessToken = await getAccessToken();
-      const result = await withRequestTimeout(
-        configureInstanceWebhook({
-          data: { instanceName: instance.instance_name, accessToken },
-        }),
-        "A configuração do webhook",
-      );
-      if (!result.success) {
-        toast.error(result.error ?? "Erro ao configurar webhook");
-        return;
-      }
-      toast.success(
-        `Webhook configurado! Eventos: ${result.events?.join(", ") ?? "—"}`,
-      );
-      console.log("[WhatsAppTab] webhook configurado", {
-        endpoint: result.endpoint,
-        webhookUrl: result.webhookUrl,
-        events: result.events,
-      });
-    } catch (error) {
-      toast.error(getAniversariosErrorMessage(error));
-    } finally {
-      setConfiguringWebhook(false);
-    }
-  };
+
 
   const StepperCard = () => {
     const isConnected = instance?.status === "connected";
