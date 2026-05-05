@@ -178,22 +178,14 @@ function AdminLogs() {
   const isMobile = useIsMobile();
   const { session } = useAuth();
   const accessToken = session?.access_token ?? "";
-  const now = new Date();
-  const [periodo, setPeriodo] = useState<FiltroPeriodo>("mes");
-  const [mes, setMes] = useState<number>(now.getMonth());
-  const [ano, setAno] = useState<number>(now.getFullYear());
+  const [periodo, setPeriodo] = useState<FiltroPeriodo>("7d");
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
   const [pageSize, setPageSize] = useState<number>(10);
 
   const range = useMemo(
-    () => getRange(periodo, mes, ano, customRange),
-    [periodo, mes, ano, customRange],
+    () => getRange(periodo, customRange),
+    [periodo, customRange],
   );
-
-  const anosDisponiveis = useMemo(() => {
-    const atual = now.getFullYear();
-    return [atual - 2, atual - 1, atual, atual + 1];
-  }, [now]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin-logs-agrupados", range.dataInicio, range.dataFim, accessToken],
