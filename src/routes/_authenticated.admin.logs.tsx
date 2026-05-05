@@ -236,12 +236,12 @@ function AdminLogs() {
 
       {/* Filtros de período */}
       <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 p-4">
-          <Button variant={periodo === "mes" ? "default" : "outline"} size="sm" onClick={() => setPeriodo("mes")}>
-            Mês
+        <CardContent className="flex flex-wrap items-center gap-2 p-3 sm:p-4">
+          <Button variant={periodo === "7d" ? "default" : "outline"} size="sm" onClick={() => setPeriodo("7d")}>
+            Últimos 7 dias
           </Button>
-          <Button variant={periodo === "ano" ? "default" : "outline"} size="sm" onClick={() => setPeriodo("ano")}>
-            Ano
+          <Button variant={periodo === "30d" ? "default" : "outline"} size="sm" onClick={() => setPeriodo("30d")}>
+            Últimos 30 dias
           </Button>
           <Popover>
             <PopoverTrigger asChild>
@@ -269,27 +269,6 @@ function AdminLogs() {
               />
             </PopoverContent>
           </Popover>
-
-          {periodo === "mes" && (
-            <Select value={String(mes)} onValueChange={(v) => setMes(Number(v))}>
-              <SelectTrigger className="h-9 w-[140px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {MESES.map((m, i) => (
-                  <SelectItem key={i} value={String(i)}>{m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {(periodo === "mes" || periodo === "ano") && (
-            <Select value={String(ano)} onValueChange={(v) => setAno(Number(v))}>
-              <SelectTrigger className="h-9 w-[100px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {anosDisponiveis.map((a) => (
-                  <SelectItem key={a} value={String(a)}>{a}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
 
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Mostrar</span>
