@@ -5,6 +5,7 @@ import {
   DollarSign,
   LogOut,
   ArrowLeft,
+  Bell,
   LifeBuoy,
   Mail,
   MessageCircle,
@@ -40,6 +41,7 @@ const menuItems = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
   { title: "Usuários", url: "/admin/usuarios", icon: Users },
   { title: "Logs", url: "/admin/logs", icon: FileText },
+  { title: "Notificações", url: "/admin/notificacoes", icon: Bell },
   { title: "Modelos", url: "/admin/modelos", icon: ImageIcon },
   { title: "Financeiro", url: "/admin/financeiro", icon: DollarSign },
 ];
