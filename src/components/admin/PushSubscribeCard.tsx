@@ -139,11 +139,24 @@ export function PushSubscribeCard() {
     );
   }
 
+  const status = subscribed
+    ? { label: "Ativadas neste dispositivo", icon: CheckCircle2, className: "bg-accent/10 text-accent" }
+    : permission === "denied"
+      ? { label: "Bloqueadas no navegador", icon: XCircle, className: "bg-destructive/10 text-destructive" }
+      : { label: "Não ativadas", icon: BellOff, className: "bg-muted text-muted-foreground" };
+  const StatusIcon = status.icon;
+
   return (
     <div className="rounded-lg border bg-card p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Bell className="h-4 w-4 text-primary" />
-        <h3 className="font-semibold">Notificações Push (admin)</h3>
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Bell className="h-4 w-4 text-primary" />
+          <h3 className="font-semibold">Notificações Push (admin)</h3>
+        </div>
+        <Badge variant="outline" className={status.className}>
+          <StatusIcon className="mr-1 h-3 w-3" />
+          {status.label}
+        </Badge>
       </div>
       <p className="mb-3 text-sm text-muted-foreground">
         Receba alertas no dispositivo quando uma instância desconectar ou houver nova assinatura.
