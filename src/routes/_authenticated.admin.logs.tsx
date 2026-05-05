@@ -2,7 +2,17 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { adminLogsAgrupados } from "@/utils/admin.functions";
+
+function formatPhoneBR(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 11) return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
+  if (digits.length === 10) return `(${digits.slice(0,2)}) ${digits.slice(2,6)}-${digits.slice(6)}`;
+  if (digits.length === 13) return `+${digits.slice(0,2)} (${digits.slice(2,4)}) ${digits.slice(4,9)}-${digits.slice(9)}`;
+  return raw;
+}
 import {
   AlertTriangle,
   CalendarIcon,
@@ -54,7 +64,8 @@ type LogRow = {
   email: string | null;
   nome_responsavel: string | null;
   instancia: string | null;
-  data: string; // YYYY-MM-DD ou ISO
+  owner_number: string | null;
+  data: string;
   total: number | null;
   enviados: number | null;
   erros: number | null;
@@ -175,52 +186,38 @@ function agrupar(
 
 function AdminLogs() {
   const isMobile = useIsMobile();
+  const { session } = useAuth();
+  const accessToken = session?.access_token ?? "";
   const [periodo, setPeriodo] = useState<FiltroPeriodo>("7d");
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
 
   const range = useMemo(() => getRange(periodo, customRange), [periodo, customRange]);
 
-  const { data: rows = [], isLoading, error } = useQuery({
-    queryKey: ["logs-agrupados", range.dataInicio, range.dataFim],
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["admin-logs-agrupados", range.dataInicio, range.dataFim, accessToken],
+    enabled: !!accessToken,
     queryFn: async () => {
-      console.log("ADMIN LOGS START", range);
-      const t0 = performance.now();
-      const { data, error } = await supabase
-        .from("logs_agrupados")
-        .select("*")
-        .gte("data", range.dataInicio)
-        .lte("data", range.dataFim)
-        .limit(200);
-      console.log("ADMIN LOGS DONE", Math.round(performance.now() - t0), "ms");
-      console.log("TOTAL REGISTROS:", data?.length);
-      if (error) throw error;
-      return (data ?? []) as LogRow[];
+      const res = await adminLogsAgrupados({
+        data: {
+          accessToken,
+          dataInicio: range.dataInicio,
+          dataFim: range.dataFim,
+        },
+      });
+      return res;
     },
     staleTime: 30_000,
   });
 
-  // Busca owner_number (número conectado) de cada instância para mostrar
-  // junto do nome no painel de logs.
-  const { data: instancias = [] } = useQuery({
-    queryKey: ["admin-logs-instancias"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name, owner_number");
-      if (error) throw error;
-      return (data ?? []) as Array<{
-        instance_name: string;
-        owner_number: string | null;
-      }>;
-    },
-    staleTime: 60_000,
-  });
+  const rows = (data?.rows ?? []) as LogRow[];
 
   const ownerNumberByInstance = useMemo(() => {
     const m = new Map<string, string | null>();
-    for (const i of instancias) m.set(i.instance_name, i.owner_number);
+    for (const r of rows) {
+      if (r.instancia) m.set(r.instancia, (r as LogRow & { owner_number?: string | null }).owner_number ?? null);
+    }
     return m;
-  }, [instancias]);
+  }, [rows]);
 
   const grupos = useMemo(
     () => agrupar(rows, ownerNumberByInstance),
@@ -365,11 +362,9 @@ function AdminLogs() {
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                             <div className="flex flex-col items-start gap-0.5">
                               <span className="text-sm font-semibold">📱 {inst.instancia}</span>
-                              {inst.owner_number && (
-                                <span className="font-mono text-xs text-muted-foreground">
-                                  {inst.owner_number}
-                                </span>
-                              )}
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {inst.owner_number ? formatPhoneBR(inst.owner_number) : "Sem número conectado"}
+                              </span>
                             </div>
                             <div className="flex flex-wrap items-center gap-2 text-xs">
                               <Badge variant="outline">{inst.total} total</Badge>
