@@ -251,11 +251,10 @@ const STEPS: Step[] = [
       "Todos os dias, às 9h da manhã, o sistema verifica automaticamente quem faz aniversário e dispara a mensagem sozinho. Você só precisa ativar uma vez — depois disso, é piloto automático. Pode pausar ou desligar quando quiser.",
     comoFazer: [
       "Vá em 'Aniversários' → aba 'Envio'.",
-      "Confira o preview da mensagem que vai sair.",
-      "Ative o envio automático.",
+      "Confira se o WhatsApp aparece conectado.",
       "Acompanhe o histórico de envios na própria tela.",
     ],
-    dica: "Use o botão 'Enviar Teste' para mandar a mensagem para o seu próprio número antes — assim você confere se está tudo certo antes de liberar para os pacientes.",
+    dica: "A aba Envio mostra apenas os registros reais gerados pela automação ativa.",
     mockup: (
       <MockWindow titulo="Aniversários › Envio">
         <div className="space-y-2">
@@ -264,13 +263,13 @@ const STEPS: Step[] = [
             <span className="font-semibold">09:00 (fixo)</span>
           </div>
           <div className="flex items-center justify-between rounded border border-border p-2 text-[10px]">
-            <span>Envio automático</span>
+            <span>WhatsApp</span>
             <span className="rounded-full bg-primary px-2 py-0.5 text-[9px] text-primary-foreground">
-              Ativo
+              Conectado
             </span>
           </div>
-          <div className="flex justify-end">
-            <HighlightBtn pulse={false}>Enviar Teste</HighlightBtn>
+          <div className="rounded border border-border p-2 text-[10px] text-muted-foreground">
+            Últimos envios aparecem automaticamente aqui.
           </div>
         </div>
       </MockWindow>
