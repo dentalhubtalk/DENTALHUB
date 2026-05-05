@@ -306,7 +306,7 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [userId, queryClient, notifyFinalStatus]);
+  }, [userId, queryClient, notifyFinalStatus, range.from, range.to]);
 
   const seededNotifiedRef = useRef(false);
   useEffect(() => {
