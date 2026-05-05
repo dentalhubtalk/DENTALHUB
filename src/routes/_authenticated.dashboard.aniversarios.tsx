@@ -38,24 +38,26 @@ function AniversariosPage() {
       />
 
       <Tabs defaultValue="whatsapp" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="whatsapp">
-            <Smartphone className="mr-2 h-4 w-4" />
-            WhatsApp
-          </TabsTrigger>
-          <TabsTrigger value="mensagem">
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Mensagem
-          </TabsTrigger>
-          <TabsTrigger value="contatos">
-            <Users className="mr-2 h-4 w-4" />
-            Contatos
-          </TabsTrigger>
-          <TabsTrigger value="envio">
-            <Send className="mr-2 h-4 w-4" />
-            Envio
-          </TabsTrigger>
-        </TabsList>
+        <div className="-mx-1 overflow-x-auto px-1">
+          <TabsList className="w-full sm:w-auto">
+            <TabsTrigger value="whatsapp">
+              <Smartphone className="mr-2 h-4 w-4" />
+              WhatsApp
+            </TabsTrigger>
+            <TabsTrigger value="mensagem">
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Mensagem
+            </TabsTrigger>
+            <TabsTrigger value="contatos">
+              <Users className="mr-2 h-4 w-4" />
+              Contatos
+            </TabsTrigger>
+            <TabsTrigger value="envio">
+              <Send className="mr-2 h-4 w-4" />
+              Envio
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="whatsapp">
           <WhatsAppTab acessoAtivo={acesso.ativo} />
