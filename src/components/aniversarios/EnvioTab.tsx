@@ -140,7 +140,7 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
   });
 
   const enviosQuery = useQuery({
-    queryKey: ["aniv:envios", userId],
+    queryKey: ["aniv:envios", userId, range.from, range.to],
     enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await withRequestTimeout(
@@ -148,8 +148,10 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
           .from("envios_whatsapp")
           .select("id, telefone, nome, status, erro, created_at")
           .eq("user_id", userId!)
+          .gte("created_at", range.from)
+          .lte("created_at", range.to)
           .order("created_at", { ascending: false })
-          .limit(50),
+          .limit(500),
         "O carregamento do histórico",
       );
       if (error) throw error;
