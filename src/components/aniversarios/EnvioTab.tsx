@@ -399,6 +399,51 @@ export function EnvioTab({ acessoAtivo = true }: { acessoAtivo?: boolean } = {})
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant={filtroEnvio === "7d" ? "default" : "outline"}
+              onClick={() => setFiltroEnvio("7d")}
+            >
+              Últimos 7 dias
+            </Button>
+            <Button
+              size="sm"
+              variant={filtroEnvio === "30d" ? "default" : "outline"}
+              onClick={() => setFiltroEnvio("30d")}
+            >
+              Últimos 30 dias
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  size="sm"
+                  variant={filtroEnvio === "custom" ? "default" : "outline"}
+                  className="gap-2"
+                >
+                  <CalendarIcon className="h-4 w-4" />
+                  {filtroEnvio === "custom" && customRange.from
+                    ? `${formatDateBR(customRange.from.toISOString())}${customRange.to ? ` → ${formatDateBR(customRange.to.toISOString())}` : ""}`
+                    : "Personalizado"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={{ from: customRange.from, to: customRange.to }}
+                  onSelect={(r) => {
+                    setCustomRange({ from: r?.from, to: r?.to });
+                    setFiltroEnvio("custom");
+                  }}
+                  numberOfMonths={isMobile ? 1 : 2}
+                  className="pointer-events-auto p-3"
+                />
+              </PopoverContent>
+            </Popover>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {envios.length} envio(s) no período
+            </span>
+          </div>
           {envios.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
               Nenhum envio realizado ainda
