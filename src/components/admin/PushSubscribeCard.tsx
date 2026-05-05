@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Loader2 } from "lucide-react";
+import { Bell, BellOff, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import {
@@ -24,6 +25,7 @@ export function PushSubscribeCard() {
   const accessToken = session?.access_token ?? "";
   const [supported, setSupported] = useState<boolean | null>(null);
   const [subscribed, setSubscribed] = useState<boolean>(false);
+  const [permission, setPermission] = useState<NotificationPermission>("default");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -33,21 +35,26 @@ export function PushSubscribeCard() {
       "PushManager" in window;
     setSupported(ok);
     if (!ok) return;
+    setPermission(Notification.permission);
     navigator.serviceWorker
-      .getRegistration("/sw.js")
+      .getRegistration()
       .then((reg) => reg?.pushManager.getSubscription())
       .then((sub) => setSubscribed(!!sub))
       .catch(() => {});
   }, []);
 
   const handleSubscribe = async () => {
-    if (!accessToken) return;
+    if (!accessToken) {
+      toast.error("Sessão não encontrada. Entre novamente para ativar.");
+      return;
+    }
     setBusy(true);
     try {
       const reg =
-        (await navigator.serviceWorker.getRegistration("/sw.js")) ??
+        (await navigator.serviceWorker.getRegistration()) ??
         (await navigator.serviceWorker.register("/sw.js"));
       const perm = await Notification.requestPermission();
+      setPermission(perm);
       if (perm !== "granted") {
         toast.error("Permissão de notificação negada");
         return;
@@ -57,10 +64,12 @@ export function PushSubscribeCard() {
         toast.error("Servidor não tem VAPID configurado");
         return;
       }
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlB64ToUint8Array(key),
-      });
+      const sub =
+        (await reg.pushManager.getSubscription()) ??
+        (await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlB64ToUint8Array(key),
+        }));
       const json = sub.toJSON() as {
         endpoint?: string;
         keys?: { p256dh?: string; auth?: string };
@@ -92,7 +101,7 @@ export function PushSubscribeCard() {
   const handleUnsubscribe = async () => {
     setBusy(true);
     try {
-      const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+      const reg = await navigator.serviceWorker.getRegistration();
       const sub = await reg?.pushManager.getSubscription();
       if (sub) {
         await sub.unsubscribe();
@@ -130,11 +139,24 @@ export function PushSubscribeCard() {
     );
   }
 
+  const status = subscribed
+    ? { label: "Ativadas neste dispositivo", icon: CheckCircle2, className: "bg-accent/10 text-accent" }
+    : permission === "denied"
+      ? { label: "Bloqueadas no navegador", icon: XCircle, className: "bg-destructive/10 text-destructive" }
+      : { label: "Não ativadas", icon: BellOff, className: "bg-muted text-muted-foreground" };
+  const StatusIcon = status.icon;
+
   return (
     <div className="rounded-lg border bg-card p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Bell className="h-4 w-4 text-primary" />
-        <h3 className="font-semibold">Notificações Push (admin)</h3>
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Bell className="h-4 w-4 text-primary" />
+          <h3 className="font-semibold">Notificações Push (admin)</h3>
+        </div>
+        <Badge variant="outline" className={status.className}>
+          <StatusIcon className="mr-1 h-3 w-3" />
+          {status.label}
+        </Badge>
       </div>
       <p className="mb-3 text-sm text-muted-foreground">
         Receba alertas no dispositivo quando uma instância desconectar ou houver nova assinatura.

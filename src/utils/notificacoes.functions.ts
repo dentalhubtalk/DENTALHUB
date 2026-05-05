@@ -20,14 +20,22 @@ async function getAuthedClient(accessToken: string) {
 
 // Lista as 30 mais recentes do usuário corrente.
 export const listNotificacoes = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ accessToken: z.string().min(1) }))
+  .inputValidator(
+    z.object({
+      accessToken: z.string().min(1),
+      limit: z.number().min(1).max(100).optional(),
+    }),
+  )
   .handler(async ({ data }) => {
-    const { supabase } = await getAuthedClient(data.accessToken);
+    const { supabase, user } = await getAuthedClient(data.accessToken);
     const { data: rows, error } = await supabase
       .from("notificacoes")
-      .select("id, titulo, mensagem, tipo, link, lida, audiencia, created_at")
+      .select(
+        "id, user_id, titulo, mensagem, tipo, link, lida, audiencia, created_at",
+      )
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(30);
+      .limit(data.limit ?? 30);
     if (error) {
       // Se a tabela ainda não foi criada, devolve vazio em vez de derrubar a UI
       const msg = error.message?.toLowerCase() ?? "";
@@ -48,10 +56,10 @@ export const marcarComoLida = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const { supabase } = await getAuthedClient(data.accessToken);
+    const { supabase, user } = await getAuthedClient(data.accessToken);
     let q = supabase.from("notificacoes").update({ lida: true });
     if (data.id) q = q.eq("id", data.id);
-    else q = q.eq("lida", false);
+    else q = q.eq("user_id", user.id).eq("lida", false);
     const { error } = await q;
     if (error) throw new Error(error.message);
     return { ok: true };
