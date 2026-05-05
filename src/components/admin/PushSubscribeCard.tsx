@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Loader2 } from "lucide-react";
+import { Bell, BellOff, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import {
@@ -24,6 +25,7 @@ export function PushSubscribeCard() {
   const accessToken = session?.access_token ?? "";
   const [supported, setSupported] = useState<boolean | null>(null);
   const [subscribed, setSubscribed] = useState<boolean>(false);
+  const [permission, setPermission] = useState<NotificationPermission>("default");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -33,21 +35,26 @@ export function PushSubscribeCard() {
       "PushManager" in window;
     setSupported(ok);
     if (!ok) return;
+    setPermission(Notification.permission);
     navigator.serviceWorker
-      .getRegistration("/sw.js")
+      .getRegistration()
       .then((reg) => reg?.pushManager.getSubscription())
       .then((sub) => setSubscribed(!!sub))
       .catch(() => {});
   }, []);
 
   const handleSubscribe = async () => {
-    if (!accessToken) return;
+    if (!accessToken) {
+      toast.error("Sessão não encontrada. Entre novamente para ativar.");
+      return;
+    }
     setBusy(true);
     try {
       const reg =
-        (await navigator.serviceWorker.getRegistration("/sw.js")) ??
+        (await navigator.serviceWorker.getRegistration()) ??
         (await navigator.serviceWorker.register("/sw.js"));
       const perm = await Notification.requestPermission();
+      setPermission(perm);
       if (perm !== "granted") {
         toast.error("Permissão de notificação negada");
         return;
@@ -57,10 +64,12 @@ export function PushSubscribeCard() {
         toast.error("Servidor não tem VAPID configurado");
         return;
       }
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlB64ToUint8Array(key),
-      });
+      const sub =
+        (await reg.pushManager.getSubscription()) ??
+        (await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlB64ToUint8Array(key),
+        }));
       const json = sub.toJSON() as {
         endpoint?: string;
         keys?: { p256dh?: string; auth?: string };
@@ -92,7 +101,7 @@ export function PushSubscribeCard() {
   const handleUnsubscribe = async () => {
     setBusy(true);
     try {
-      const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+      const reg = await navigator.serviceWorker.getRegistration();
       const sub = await reg?.pushManager.getSubscription();
       if (sub) {
         await sub.unsubscribe();
