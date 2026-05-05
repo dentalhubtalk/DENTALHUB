@@ -4,7 +4,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
 import { adminLogsAgrupados } from "@/utils/admin.functions";
-import { formatPhoneBR } from "@/lib/utils";
+
+function formatPhoneBR(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 11) return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
+  if (digits.length === 10) return `(${digits.slice(0,2)}) ${digits.slice(2,6)}-${digits.slice(6)}`;
+  if (digits.length === 13) return `+${digits.slice(0,2)} (${digits.slice(2,4)}) ${digits.slice(4,9)}-${digits.slice(9)}`;
+  return raw;
+}
 import {
   AlertTriangle,
   CalendarIcon,
