@@ -362,11 +362,9 @@ function AdminLogs() {
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                             <div className="flex flex-col items-start gap-0.5">
                               <span className="text-sm font-semibold">📱 {inst.instancia}</span>
-                              {inst.owner_number && (
-                                <span className="font-mono text-xs text-muted-foreground">
-                                  {inst.owner_number}
-                                </span>
-                              )}
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {inst.owner_number ? formatPhoneBR(inst.owner_number) : "Sem número conectado"}
+                              </span>
                             </div>
                             <div className="flex flex-wrap items-center gap-2 text-xs">
                               <Badge variant="outline">{inst.total} total</Badge>
