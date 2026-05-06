@@ -133,6 +133,37 @@ function AdminNotificacoesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <Label className="text-sm">Destinatário</Label>
+            <RadioGroup
+              value={destino}
+              onValueChange={(v) => setDestino(v as "todos" | "um")}
+              className="flex flex-wrap gap-4"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="todos" id="dest-todos" />
+                <Label htmlFor="dest-todos" className="font-normal">Todos os usuários</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="um" id="dest-um" />
+                <Label htmlFor="dest-um" className="font-normal">Usuário específico</Label>
+              </div>
+            </RadioGroup>
+            {destino === "um" && (
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um usuário" />
+                </SelectTrigger>
+                <SelectContent>
+                  {usuarios.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nome} {u.email ? `· ${u.email}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
           <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título do comunicado" maxLength={120} />
           <Textarea value={mensagem} onChange={(e) => setMensagem(e.target.value)} placeholder="Mensagem" rows={4} maxLength={1000} />
           <Button onClick={sendComunicado} disabled={sending || titulo.trim().length < 3 || mensagem.trim().length < 3} className="gap-2">
