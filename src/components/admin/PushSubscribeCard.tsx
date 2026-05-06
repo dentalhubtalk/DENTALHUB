@@ -175,6 +175,16 @@ export function PushSubscribeCard() {
       <p className="mb-3 text-sm text-muted-foreground">
         Receba alertas no dispositivo quando uma instância desconectar ou houver nova assinatura.
       </p>
+      {permission === "denied" && (
+        <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          <p className="font-semibold">Como liberar manualmente:</p>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+            <li>Clique no cadeado 🔒 ao lado do endereço do site</li>
+            <li>Vá em <b>Permissões</b> → <b>Notificações</b></li>
+            <li>Selecione <b>Permitir</b> e recarregue a página</li>
+          </ol>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {subscribed ? (
           <Button variant="outline" onClick={handleUnsubscribe} disabled={busy}>
