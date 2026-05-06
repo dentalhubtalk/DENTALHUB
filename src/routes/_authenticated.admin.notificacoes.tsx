@@ -8,11 +8,25 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PushSubscribeCard } from "@/components/admin/PushSubscribeCard";
 import { useAuth } from "@/hooks/use-auth";
 import { formatDateTimeBR } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
-import { enviarComunicado, listNotificacoes, marcarComoLida } from "@/utils/notificacoes.functions";
+import {
+  enviarComunicado,
+  listAdminUserOptions,
+  listNotificacoes,
+  marcarComoLida,
+} from "@/utils/notificacoes.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/notificacoes")({
   component: AdminNotificacoesPage,
