@@ -56,12 +56,21 @@ function AdminNotificacoesPage() {
   const [titulo, setTitulo] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [sending, setSending] = useState(false);
+  const [destino, setDestino] = useState<"todos" | "um">("todos");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["notificacoes", "admin-page"],
     enabled: !!accessToken,
     queryFn: () => listNotificacoes({ data: { accessToken, limit: 100 } }),
   });
+
+  const { data: usersData } = useQuery({
+    queryKey: ["admin", "user-options"],
+    enabled: !!accessToken,
+    queryFn: () => listAdminUserOptions({ data: { accessToken } }),
+  });
+  const usuarios = usersData?.usuarios ?? [];
 
   const notificacoes = (data?.notificacoes ?? []) as Notificacao[];
   const naoLidas = useMemo(() => notificacoes.filter((n) => !n.lida).length, [notificacoes]);
@@ -74,12 +83,24 @@ function AdminNotificacoesPage() {
 
   const sendComunicado = async () => {
     if (!accessToken || sending) return;
+    if (destino === "um" && !selectedUserId) {
+      toast.error("Selecione o destinatário");
+      return;
+    }
     setSending(true);
     try {
-      const result = await enviarComunicado({ data: { accessToken, titulo, mensagem } });
+      const result = await enviarComunicado({
+        data: {
+          accessToken,
+          titulo,
+          mensagem,
+          userIds: destino === "um" ? [selectedUserId] : undefined,
+        },
+      });
       setTitulo("");
       setMensagem("");
       toast.success(`Comunicado enviado para ${result.usuarios ?? 0} usuário(s)`);
+      await queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao enviar comunicado");
     } finally {
