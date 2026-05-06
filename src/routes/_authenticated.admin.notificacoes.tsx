@@ -8,11 +8,25 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PushSubscribeCard } from "@/components/admin/PushSubscribeCard";
 import { useAuth } from "@/hooks/use-auth";
 import { formatDateTimeBR } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
-import { enviarComunicado, listNotificacoes, marcarComoLida } from "@/utils/notificacoes.functions";
+import {
+  enviarComunicado,
+  listAdminUserOptions,
+  listNotificacoes,
+  marcarComoLida,
+} from "@/utils/notificacoes.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/notificacoes")({
   component: AdminNotificacoesPage,
@@ -42,12 +56,21 @@ function AdminNotificacoesPage() {
   const [titulo, setTitulo] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [sending, setSending] = useState(false);
+  const [destino, setDestino] = useState<"todos" | "um">("todos");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["notificacoes", "admin-page"],
     enabled: !!accessToken,
     queryFn: () => listNotificacoes({ data: { accessToken, limit: 100 } }),
   });
+
+  const { data: usersData } = useQuery({
+    queryKey: ["admin", "user-options"],
+    enabled: !!accessToken,
+    queryFn: () => listAdminUserOptions({ data: { accessToken } }),
+  });
+  const usuarios = usersData?.usuarios ?? [];
 
   const notificacoes = (data?.notificacoes ?? []) as Notificacao[];
   const naoLidas = useMemo(() => notificacoes.filter((n) => !n.lida).length, [notificacoes]);
@@ -60,12 +83,24 @@ function AdminNotificacoesPage() {
 
   const sendComunicado = async () => {
     if (!accessToken || sending) return;
+    if (destino === "um" && !selectedUserId) {
+      toast.error("Selecione o destinatário");
+      return;
+    }
     setSending(true);
     try {
-      const result = await enviarComunicado({ data: { accessToken, titulo, mensagem } });
+      const result = await enviarComunicado({
+        data: {
+          accessToken,
+          titulo,
+          mensagem,
+          userIds: destino === "um" ? [selectedUserId] : undefined,
+        },
+      });
       setTitulo("");
       setMensagem("");
       toast.success(`Comunicado enviado para ${result.usuarios ?? 0} usuário(s)`);
+      await queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao enviar comunicado");
     } finally {
@@ -98,6 +133,37 @@ function AdminNotificacoesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <Label className="text-sm">Destinatário</Label>
+            <RadioGroup
+              value={destino}
+              onValueChange={(v) => setDestino(v as "todos" | "um")}
+              className="flex flex-wrap gap-4"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="todos" id="dest-todos" />
+                <Label htmlFor="dest-todos" className="font-normal">Todos os usuários</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="um" id="dest-um" />
+                <Label htmlFor="dest-um" className="font-normal">Usuário específico</Label>
+              </div>
+            </RadioGroup>
+            {destino === "um" && (
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um usuário" />
+                </SelectTrigger>
+                <SelectContent>
+                  {usuarios.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nome} {u.email ? `· ${u.email}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
           <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título do comunicado" maxLength={120} />
           <Textarea value={mensagem} onChange={(e) => setMensagem(e.target.value)} placeholder="Mensagem" rows={4} maxLength={1000} />
           <Button onClick={sendComunicado} disabled={sending || titulo.trim().length < 3 || mensagem.trim().length < 3} className="gap-2">

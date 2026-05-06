@@ -29,10 +29,12 @@ function ComunicadosPage() {
   const accessToken = session?.access_token ?? "";
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["notificacoes", "comunicados"],
     enabled: !!accessToken,
     queryFn: () => listNotificacoes({ data: { accessToken, limit: 100 } }),
+    retry: 1,
+    refetchInterval: 60_000,
   });
 
   const comunicados = ((data?.notificacoes ?? []) as Comunicado[]).filter(
@@ -67,10 +69,14 @@ function ComunicadosPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isLoading && !data ? (
             <div className="flex justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
+          ) : isError ? (
+            <p className="py-10 text-center text-sm text-destructive">
+              Erro ao carregar comunicados: {(error as Error)?.message ?? "tente novamente"}
+            </p>
           ) : comunicados.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">Nenhum comunicado recebido ainda.</p>
           ) : (
